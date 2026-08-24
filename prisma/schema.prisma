@@ -1,0 +1,177 @@
+// MintDash data model
+//
+// Security note: no table in this schema stores private key material.
+// Wallet rows are public addresses + metadata only. The Operator's signing
+// key (if the "local hot wallet" mode is used instead of a connected
+// browser wallet) is encrypted client-side and kept in that browser's
+// localStorage — it never crosses the network to this database. See
+// src/lib/wallet/localSigner.ts.
+
+generator client {
+  provider      = "prisma-client-js"
+  // debian-openssl-3.0.x matches Railway's/Nixpacks' default container —
+  // without this, `prisma generate` on your machine can produce a client
+  // whose query engine binary doesn't run in the deployed container.
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum WalletRole {
+  OPERATOR
+  RECEIVER
+}
+
+enum MintPhase {
+  PUBLIC
+  WHITELIST
+}
+
+enum RunStatus {
+  DRAFT
+  PREFLIGHT
+  RUNNING
+  COMPLETED
+  FAILED
+  PARTIAL
+}
+
+enum ItemStatus {
+  PENDING
+  SUBMITTED
+  CONFIRMED
+  FAILED
+}
+
+enum EligibilityStatus {
+  UNKNOWN
+  ELIGIBLE
+  INELIGIBLE
+}
+
+/// A wallet address registered by a user, tagged with a role for a given
+/// chain. The same address can be registered on multiple chains (one row
+/// each) since readiness/role bookkeeping is naturally per-chain.
+model Wallet {
+  id        String     @id @default(cuid())
+  userId    String
+  chainId   Int
+  address   String
+  label     String
+  role      WalletRole
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  receiverOf   CampaignReceiver[]
+  operatorRuns MintRun[]          @relation("OperatorRuns")
+  receiverRuns MintRunItem[]
+
+  @@unique([userId, chainId, address])
+  @@index([userId, role])
+}
+
+/// A saved mint configuration: a contract, a function on it, a phase, and
+/// a price. Reusable across many runs (e.g. re-running the same campaign
+/// with a newly-added batch of receivers).
+model Campaign {
+  id               String    @id @default(cuid())
+  userId           String
+  chainId          Int
+  name             String
+  contractAddress  String
+  abi              Json
+  mintFunctionName String
+  /// Name of the address-typed input that receives the mint recipient, if
+  /// the function exposes one (e.g. "to"). Null means the function mints
+  /// to msg.sender, which changes who is able to sign for it — see
+  /// src/lib/contracts/abi.ts.
+  recipientParam   String?
+  phase            MintPhase @default(PUBLIC)
+  /// Wei, stored as a decimal string to avoid float/BigInt<->JSON friction.
+  priceWeiPerMint  String    @default("0")
+  maxPerWallet     Int?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  receivers CampaignReceiver[]
+  runs      MintRun[]
+
+  @@index([userId])
+}
+
+/// Join table: which wallets are attached to a campaign as candidate
+/// receivers, plus the last-known whitelist eligibility for each.
+model CampaignReceiver {
+  id              String            @id @default(cuid())
+  campaignId      String
+  walletId        String
+  eligibility     EligibilityStatus @default(UNKNOWN)
+  eligibilityNote String?
+  createdAt       DateTime          @default(now())
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  wallet   Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, walletId])
+}
+
+/// One execution attempt of a campaign: preflight results + a batch of
+/// per-receiver mint transactions.
+model MintRun {
+  id                      String    @id @default(cuid())
+  campaignId              String
+  operatorWalletId        String
+  userId                  String
+  status                  RunStatus @default(DRAFT)
+  maxFeePerGasWei         String?
+  maxPriorityFeePerGasWei String?
+  estimatedTotalCostWei   String?
+  startedAt               DateTime?
+  completedAt             DateTime?
+  createdAt               DateTime  @default(now())
+
+  campaign Campaign      @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  operator Wallet        @relation("OperatorRuns", fields: [operatorWalletId], references: [id])
+  items    MintRunItem[]
+
+  @@index([userId])
+  @@index([campaignId])
+}
+
+/// A single wallet's mint within a run — the unit that the UI shows
+/// Pending → Submitted → Confirmed/Failed status for, and the unit that
+/// "Retry failed wallets only" operates on.
+model MintRunItem {
+  id                 String     @id @default(cuid())
+  runId              String
+  receiverWalletId   String
+  status             ItemStatus @default(PENDING)
+  txHash             String?
+  errorMessage       String?
+  gasUsedWei         String?
+  effectiveGasPriceWei String?
+  attempt            Int        @default(1)
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+
+  run      MintRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  receiver Wallet  @relation(fields: [receiverWalletId], references: [id])
+
+  @@index([runId])
+  @@index([receiverWalletId])
+}
+
+/// Lightweight event log that backs the dashboard's live activity feed.
+model ActivityEvent {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String
+  message   String
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+}

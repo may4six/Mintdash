@@ -1,0 +1,76 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 226 26% 6%;
+    --foreground: 220 20% 93%;
+
+    --card: 222 24% 9%;
+    --card-foreground: 220 20% 93%;
+
+    --border: 226 18% 15%;
+    --border-strong: 226 16% 22%;
+    --input: 226 16% 22%;
+    --ring: 230 100% 66%;
+
+    --primary: 230 100% 66%;
+    --primary-foreground: 226 30% 8%;
+
+    --secondary: 222 20% 13%;
+    --secondary-foreground: 220 20% 93%;
+
+    --muted: 222 20% 13%;
+    --muted-foreground: 220 13% 58%;
+
+    --accent: 222 20% 15%;
+    --accent-foreground: 220 20% 93%;
+
+    --destructive: 350 78% 62%;
+    --destructive-foreground: 226 30% 8%;
+
+    --success: 153 55% 45%;
+    --success-foreground: 226 30% 8%;
+
+    --warning: 35 78% 56%;
+    --warning-foreground: 226 30% 8%;
+
+    /* Role colors — deliberately distinct from the status palette above so
+       a role badge (Operator/Receiver) is never mistaken for a tx status. */
+    --operator: 189 65% 58%;
+    --receiver: 265 55% 70%;
+
+    --radius: 0.5rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+  ::selection {
+    @apply bg-primary/30 text-foreground;
+  }
+}
+
+/* Thin, muted scrollbars fit the instrument-panel register better than the
+   default chunky OS scrollbar on a data-dense dashboard. */
+@layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border-strong)) transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--border-strong));
+    border-radius: 999px;
+  }
+}
