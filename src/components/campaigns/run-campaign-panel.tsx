@@ -106,8 +106,11 @@ export function RunCampaignPanel({ campaign }: { campaign: CampaignDTO }) {
         staticArgs: {},
         phase: campaign.phase,
         priceWeiPerMint: campaign.priceWeiPerMint,
-        operatorAddress: operatorWallet.address,
-        receivers,
+        operatorAddress: operatorWallet.address as `0x${string}`,
+        receivers: receivers.map((r) => ({
+          ...r,
+          address: r.address as `0x${string}`,
+        })),
       },
       {
         onSuccess: (result) => {
