@@ -262,7 +262,10 @@ export function CampaignWizard({ chainId }: { chainId: number }) {
         phase,
         priceWeiPerMint: safeParseEther(priceEth).toString(),
         operatorAddress: operatorWallet.address as `0x${string}`,
-        receivers,
+        receivers: receivers.map((r) => ({
+          ...r,
+          address: r.address as `0x${string}`,
+        })),
       },
       {
         onSuccess: (result) => {
