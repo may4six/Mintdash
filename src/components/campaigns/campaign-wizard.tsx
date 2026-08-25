@@ -261,7 +261,7 @@ export function CampaignWizard({ chainId }: { chainId: number }) {
         staticArgs,
         phase,
         priceWeiPerMint: safeParseEther(priceEth).toString(),
-        operatorAddress: operatorWallet.address,
+        operatorAddress: operatorWallet.address as `0x${string}`,
         receivers,
       },
       {
