@@ -202,3 +202,49 @@ export function explorerTxUrl(chainId: number, txHash: string): string {
   const meta = getChainMeta(chainId);
   return `${meta.explorerBase}/tx/${txHash}`;
 }
+
+/** Common mint function name hints for ABI detection */
+export const MINT_FUNCTION_NAME_HINTS = [
+  "mint",
+  "mintTo",
+  "safeMint",
+  "publicMint",
+  "claim",
+  "claimTo",
+] as const;
+
+/** Param names that usually mean “recipient / to” */
+export const RECIPIENT_PARAM_NAME_HINTS = [
+  "to",
+  "to_",
+  "recipient",
+  "account",
+  "addr",
+  "address",
+] as const;
+
+/** View names used for allowlist / eligibility checks */
+export const ELIGIBILITY_VIEW_NAME_HINTS = [
+  "isEligible",
+  "canMint",
+  "isWhitelisted",
+  "whitelist",
+  "allowlist",
+  "balanceOf",
+] as const;
+
+/** Activity feed event type keys used by API routes */
+export const ACTIVITY_EVENT_TYPES = {
+  CAMPAIGN_CREATED: "CAMPAIGN_CREATED",
+  CAMPAIGN_UPDATED: "CAMPAIGN_UPDATED",
+  RUN_STARTED: "RUN_STARTED",
+  RUN_COMPLETED: "RUN_COMPLETED",
+  RUN_FAILED: "RUN_FAILED",
+  MINT_SUCCESS: "MINT_SUCCESS",
+  MINT_FAILED: "MINT_FAILED",
+  WALLET_ADDED: "WALLET_ADDED",
+  WALLET_REMOVED: "WALLET_REMOVED",
+} as const;
+
+export type ActivityEventType =
+  (typeof ACTIVITY_EVENT_TYPES)[keyof typeof ACTIVITY_EVENT_TYPES];
