@@ -14,7 +14,7 @@ function getServerPublicClient(chainId: number) {
 }
 
 function applyMargin(gas: bigint): bigint {
-  return (gas * BigInt(10_000 + GAS_SAFETY_MARGIN_BPS)) / 10_000n;
+  return (gas * (10_000n + GAS_SAFETY_MARGIN_BPS)) / 10_000n;
 }
 
 export async function runPreflight(req: PreflightRequest): Promise<PreflightResult> {
