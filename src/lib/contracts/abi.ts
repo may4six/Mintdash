@@ -88,7 +88,9 @@ export function buildCallArgs(
     if (recipientParam && input.name === recipientParam) {
       return receiverAddress;
     }
-    return staticArgs[input.name ?? ""];
+    const raw = staticArgs[input.name ?? ""];
+    if (raw === undefined || raw === null) return raw;
+    return coerceArgValue(input.type, String(raw));
   });
 }
 
