@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState } from "react";
 import { useConnect, useAccount, useDisconnect } from "wagmi";
@@ -44,7 +44,7 @@ export function OperatorSignerPanel({
     }
     setBusy(true);
     try {
-      await signer.importLocalKey(privateKey.trim() as `0x${string}`, passphrase);
+      await signer.importLocalKey(privateKey, passphrase);
       toast.success("Key encrypted and saved to this browser only.");
       setPrivateKey("");
       setPassphrase("");
@@ -98,7 +98,7 @@ export function OperatorSignerPanel({
             </div>
           ) : (
             <div className="space-y-2">
-              <p className="text-xs font-medium text-foreground">Option A — Connect a browser wallet</p>
+              <p className="text-xs font-medium text-foreground">Option A â€” Connect a browser wallet</p>
               <div className="flex flex-wrap gap-2">
                 {connectors.map((connector) => (
                   <Button
@@ -114,7 +114,7 @@ export function OperatorSignerPanel({
               </div>
               {connectedAddress && connectedAddress.toLowerCase() !== address.toLowerCase() && (
                 <p className="text-[11px] text-warning">
-                  Your connected wallet doesn&apos;t match this Operator&apos;s address — switch accounts in your
+                  Your connected wallet doesn&apos;t match this Operator&apos;s address â€” switch accounts in your
                   wallet extension, or connect a different wallet to use as Operator instead.
                 </p>
               )}
@@ -152,7 +152,7 @@ export function OperatorSignerPanel({
 
           {signer.mode === "none" && (
             <div className="space-y-2">
-              <p className="text-xs font-medium text-foreground">Option B — Import a dedicated hot wallet key</p>
+              <p className="text-xs font-medium text-foreground">Option B â€” Import a dedicated hot wallet key</p>
               {!showImport ? (
                 <Button variant="outline" size="sm" onClick={() => setShowImport(true)}>
                   <KeyRound className="h-3.5 w-3.5" aria-hidden="true" /> Import private key
@@ -160,7 +160,7 @@ export function OperatorSignerPanel({
               ) : (
                 <div className="space-y-2 rounded-md border border-warning/30 bg-warning/5 p-3">
                   <p className="text-[11px] leading-relaxed text-warning">
-                    Only import a wallet created for this purpose and funded with just enough ETH for your mints —
+                    Only import a wallet created for this purpose and funded with just enough ETH for your mints â€”
                     never a wallet holding significant funds or valuable NFTs. This key is encrypted in your browser
                     and never reaches MintDash&apos;s server.
                   </p>
