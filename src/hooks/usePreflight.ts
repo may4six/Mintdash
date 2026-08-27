@@ -8,7 +8,7 @@ async function requestPreflight(payload: PreflightRequest): Promise<PreflightRes
   const res = await fetch("/api/preflight", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(payload, (_key, value) => (typeof value === "bigint" ? value.toString() : value)),
   });
   const data = await res.json();
   if (!res.ok) {
