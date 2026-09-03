@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Wallet, Rocket, History } from "lucide-react";
+import { LayoutDashboard, Wallet, Rocket, History, Crosshair } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
   { href: "/dashboard/wallets", label: "Wallets", icon: Wallet },
   { href: "/dashboard/campaigns", label: "Campaigns", icon: Rocket },
+  { href: "/dashboard/nft-sniper", label: "NFT Sniper", icon: Crosshair },
   { href: "/dashboard/history", label: "History", icon: History },
 ] as const;
 

@@ -110,7 +110,7 @@ All of these are documented inline in `.env.example`. Summary:
 |---|---|---|
 | `DATABASE_URL` | Yes | Postgres connection string |
 | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` / `CLERK_SECRET_KEY` | Yes | From the Clerk dashboard |
-| `NEXT_PUBLIC_MAINNET_RPC_URL` / `NEXT_PUBLIC_SEPOLIA_RPC_URL` | Recommended | Alchemy/Infura URL — falls back to a public RPC if unset, but that's rate-limited |
+| `NEXT_PUBLIC_ALCHEMY_API_KEY` | Recommended | One key drives every chain in `SUPPORTED_CHAINS` — enable each chain for it in the Alchemy dashboard. Falls back to public RPCs (rate-limited) if unset |
 | `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` | Optional | Omit to fall back to browser-injected wallets only |
 | `ETHERSCAN_API_KEY` | Optional | Powers "Detect ABI"; without it, paste the ABI manually |
 | `SEED_USER_ID` | Optional, local only | Your Clerk user ID, for `npm run db:seed` |
@@ -192,3 +192,58 @@ fabricate allowlist eligibility or bypass any on-chain control. Individual NFT
 projects may have their own rules about per-wallet mint limits or fair-launch
 expectations; those are enforced by the target contract or the project's own
 terms, not by this tool, and are yours to respect.
+
+## NFT Sniper (`/dashboard/nft-sniper`)
+
+Watches for newly-registered SeaDrop-style drops (Ethereum, and any other
+chain you add to `SUPPORTED_CHAINS`) and surfaces the ones matching a rule's
+price/gas filters. **There is no unsupervised auto-fire mode.** Every match
+sits as `OBSERVED` until you click **Snipe** or **Skip** — clicking Snipe
+creates a real campaign from the match (reusing the exact preflight and
+execution engine manual campaigns use) and hands you off to its detail page
+to review and confirm, same as any other campaign.
+
+This was a deliberate scope decision, not a missing feature: continuous
+detection plus unsupervised firing against brand-new, unvetted contracts is
+mechanically the same shape as the tooling that shows up around rug-pulls —
+preflight checks whether a call *succeeds*, not whether the contract behind
+it is legitimate. The manual-confirm version keeps the actual value (get
+notified the instant something matches, execute in one click) without that
+failure mode.
+
+**How detection works**: polls `getLogs` for `AllowedSeaDropUpdated` events
+(emitted by an NFT contract announcing itself to SeaDrop) with no address
+filter, since there's no registry of every SeaDrop contract to check
+instead. For each one found, reads current drop terms via the SeaDrop
+contract's `getPublicDrop(nftContract)`. This is a polling-interval detector
+(~20s), not mempool-level infrastructure — treat "sniper" as "get notified
+fast," not as a latency guarantee against other bots.
+
+**Known rough edges, worth knowing before relying on this**:
+- `CANONICAL_SEADROP_ADDRESS` in `src/lib/sniper/seadrop.ts` is SeaDrop's
+  standard cross-chain deployment address — verify it actually has code on
+  any chain you enable before trusting it, especially a brand-new one.
+- The `PublicDrop` struct decode assumes SeaDrop's standard field layout;
+  if a chain's deployment differs, matches for that chain will just fail to
+  decode (caught and skipped, not silently wrong).
+- Arming a snipe requires a `feeRecipient` address that's specific to each
+  drop (usually listed on the collection's own mint page) — there's no
+  reliable way to auto-discover this, so it's asked for at confirm time.
+
+## Safety model (applies to every automated feature)
+
+- **Kill switch**: `automationEnabled` (Settings panel on any automation
+  page) defaults to **off**. No rule's detection loop runs at all until this
+  is on, regardless of whether the individual rule itself is enabled.
+- **Per-rule enable**: a rule is created disabled — arming detection for it
+  is a separate, deliberate action from creating it.
+- **Caps**: max spend per rolling 24h, max concurrent runs — enforced
+  server-side (`src/lib/automation/caps.ts`) at the one point that matters,
+  right before a match is allowed to convert into a real run.
+- **Provenance**: every automated action logs to the same activity feed as
+  manual ones, tagged by type (`sniper_match_observed`,
+  `sniper_snipe_executed`, etc.) so you can always tell what fired itself
+  and what you clicked.
+- **No silent auto-execute**: across every feature in this build — NFT
+  Sniper included — the path from "detected" to "money moves" always passes
+  through a human clicking Confirm on a preflight result.

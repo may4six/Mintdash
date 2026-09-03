@@ -52,6 +52,39 @@ enum EligibilityStatus {
   INELIGIBLE
 }
 
+enum SniperType {
+  NFT
+  TOKEN
+}
+
+/// Lifecycle of one detected opportunity (a matching new drop, or a copied
+/// wallet's action). OBSERVED = seen and logged, nothing more (this is all
+/// Shadow mode ever produces). ARMED = the user has the ready-to-fire
+/// confirmation open. EXECUTED = they confirmed and a real MintRun exists
+/// for it. SKIPPED = a rule/cap/preflight check rejected it automatically.
+/// EXPIRED = it aged out (e.g. drop sold out) before any decision was made.
+enum MatchStatus {
+  OBSERVED
+  ARMED
+  EXECUTED
+  SKIPPED
+  EXPIRED
+}
+
+/// SHADOW = record-only, never signs or spends, safe for testing rules
+/// against real activity. MANUAL = surfaces a one-click confirm; nothing
+/// fires without that explicit click. There is no unsupervised auto-fire
+/// mode — every execution path in this schema ends at a human click.
+enum AutomationMode {
+  SHADOW
+  MANUAL
+}
+
+enum CopyKind {
+  MINT
+  BUY
+}
+
 /// A wallet address registered by a user, tagged with a role for a given
 /// chain. The same address can be registered on multiple chains (one row
 /// each) since readiness/role bookkeeping is naturally per-chain.
@@ -65,9 +98,11 @@ model Wallet {
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
 
-  receiverOf   CampaignReceiver[]
-  operatorRuns MintRun[]          @relation("OperatorRuns")
-  receiverRuns MintRunItem[]
+  receiverOf          CampaignReceiver[]
+  operatorRuns        MintRun[]            @relation("OperatorRuns")
+  receiverRuns        MintRunItem[]
+  sniperRulesAsOperator SniperRule[]       @relation("SniperOperator")
+  sniperReceiverOf    SniperRuleReceiver[]
 
   @@unique([userId, chainId, address])
   @@index([userId, role])
@@ -89,6 +124,10 @@ model Campaign {
   /// to msg.sender, which changes who is able to sign for it — see
   /// src/lib/contracts/abi.ts.
   recipientParam   String?
+  /// Raw string values for every OTHER input the function takes (quantity,
+  /// a fixed fee recipient, etc.) — the same shape useDelegatedMint expects,
+  /// so a saved campaign can be re-run without re-entering these each time.
+  staticArgValues  Json?     @default("{}")
   phase            MintPhase @default(PUBLIC)
   /// Wei, stored as a decimal string to avoid float/BigInt<->JSON friction.
   priceWeiPerMint  String    @default("0")
@@ -174,4 +213,127 @@ model ActivityEvent {
   createdAt DateTime @default(now())
 
   @@index([userId, createdAt])
+}
+
+/// One user-configured watch: "alert me to NFT/token launches matching
+/// these rules, on this chain, using this Operator." Detection runs
+/// client-side (see src/lib/sniper/) and writes SniperMatch rows as it
+/// finds things — this row is just the configuration, not a running process.
+model SniperRule {
+  id                String     @id @default(cuid())
+  userId            String
+  type              SniperType
+  chainId           Int
+  name              String
+  /// Master switch for this rule's monitoring. Off by default on creation.
+  enabled           Boolean    @default(false)
+  maxPriceWei       String
+  maxGasPriceWei    String?
+  quantityPerWallet Int        @default(1)
+  operatorWalletId  String
+  /// Type-specific filters: NFT rules store little beyond the columns above;
+  /// TOKEN rules add { minLiquidityWei, maxMarketCapWei, maxSlippageBps,
+  /// venues: string[] } here. Kept as JSON so adding a filter never needs a
+  /// migration.
+  config            Json       @default("{}")
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+
+  operator  Wallet               @relation("SniperOperator", fields: [operatorWalletId], references: [id])
+  receivers SniperRuleReceiver[]
+  matches   SniperMatch[]
+
+  @@index([userId, type])
+}
+
+/// Join table: which wallets a rule mints to / buys into when a match is armed.
+model SniperRuleReceiver {
+  id       String @id @default(cuid())
+  ruleId   String
+  walletId String
+
+  rule   SniperRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  wallet Wallet     @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  @@unique([ruleId, walletId])
+}
+
+/// One detected opportunity for a rule — a new contract/drop/pool that
+/// matched its filters. This is the row Shadow mode is allowed to create
+/// and update freely; only a user's explicit confirm click ever moves one
+/// to EXECUTED (see the executedRunId link to a real MintRun).
+model SniperMatch {
+  id              String      @id @default(cuid())
+  ruleId          String
+  userId          String
+  contractAddress String
+  chainId         Int
+  status          MatchStatus @default(OBSERVED)
+  detectedAt      DateTime    @default(now())
+  armedAt         DateTime?
+  executedRunId   String?
+  skipReason      String?
+  /// Whatever the detector found worth showing: price, drop name, detected
+  /// function, liquidity — shape varies by SniperType.
+  metadata        Json?
+
+  rule SniperRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([ruleId])
+}
+
+/// Per-user global automation controls. One row per user. This is the kill
+/// switch: automationEnabled must be true for any sniper/copy rule's
+/// monitoring loop to run at all, regardless of that rule's own `enabled`.
+model AutomationSettings {
+  userId            String   @id
+  automationEnabled Boolean  @default(false)
+  maxSpendPerDayWei String?
+  maxGasPriceWei    String?
+  maxConcurrentRuns Int      @default(1)
+  updatedAt         DateTime @updatedAt
+}
+
+/// A source wallet whose mints (kind=MINT) or swaps (kind=BUY) are being
+/// watched for copying. Shadow mode just logs what it would have done;
+/// Manual mode additionally surfaces a one-click confirm per observation.
+model CopyWatch {
+  id                   String         @id @default(cuid())
+  userId               String
+  kind                 CopyKind
+  chainId              Int
+  sourceAddress        String
+  label                String
+  mode                 AutomationMode @default(SHADOW)
+  operatorWalletId     String?
+  /// { maxFeePerGasWei, maxPriorityFeePerGasWei } or similar — kept flexible.
+  gasStrategy          Json?
+  /// Wallet IDs this watch mints/buys into when armed.
+  destinationWalletIds Json?
+  enabled              Boolean        @default(false)
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+
+  observations CopyObservation[]
+
+  @@index([userId, kind])
+}
+
+/// One observed action from a watched source wallet.
+model CopyObservation {
+  id            String      @id @default(cuid())
+  watchId       String
+  userId        String
+  txHash        String
+  detectedAt    DateTime    @default(now())
+  status        MatchStatus @default(OBSERVED)
+  executedRunId String?
+  skipReason    String?
+  metadata      Json?
+
+  watch CopyWatch @relation(fields: [watchId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([watchId])
 }

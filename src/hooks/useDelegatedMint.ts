@@ -3,7 +3,7 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import { usePublicClient } from "wagmi";
 import type { Abi, Address, WalletClient } from "viem";
-import { findAbiFunction, buildCallArgs } from "@/lib/contracts/abi";
+import { findAbiFunction, buildCallArgs, computeMintValue } from "@/lib/contracts/abi";
 import { extractRevertReason } from "@/lib/contracts/errors";
 import type { MintExecutionItem } from "@/types";
 
@@ -81,7 +81,7 @@ export function useDelegatedMint(params: DelegatedMintParams): UseDelegatedMintR
               args,
               account: operatorAccount,
               chain: operatorChain,
-              value: fn.stateMutability === "payable" ? params.priceWeiPerMint : undefined,
+              value: fn.stateMutability === "payable" ? computeMintValue(fn, params.staticArgs, params.priceWeiPerMint) : undefined,
               nonce,
               maxFeePerGas: params.maxFeePerGasWei,
               maxPriorityFeePerGas: params.maxPriorityFeePerGasWei,

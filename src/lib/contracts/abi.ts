@@ -39,6 +39,7 @@ export function findRecipientParamName(fn: AbiFunction): string | null {
     (input): input is AbiParameter & { name: string } =>
       input.type === "address" &&
       !!input.name &&
+      !input.name.toLowerCase().includes("fee") &&
       RECIPIENT_PARAM_NAME_HINTS.some((hint) => input.name!.toLowerCase().includes(hint))
   );
   return match?.name ?? null;
@@ -90,6 +91,10 @@ export function buildCallArgs(
     }
     const raw = staticArgs[input.name ?? ""];
     if (raw === undefined || raw === null) return raw;
+    // staticArgs is kept as plain, JSON-safe strings all the way from the
+    // form to here (a bigint anywhere upstream breaks JSON.stringify when
+    // the preflight request is sent) — coerce to the ABI's real type only
+    // at this final point of use, right before it's needed for a viem call.
     return coerceArgValue(input.type, String(raw));
   });
 }
@@ -98,6 +103,44 @@ export function buildCallArgs(
  * only the receiver's own signature can put the NFT in their own wallet. */
 export function requiresReceiverSignature(recipientParam: string | null): boolean {
   return recipientParam === null;
+}
+
+const QUANTITY_PARAM_NAME_HINTS = ["quantity", "amount", "numtokens", "count", "mintquantity", "numtomint"];
+
+/** Best-effort: a uint-typed param whose name suggests "how many to mint in
+ * this one call" — as opposed to token IDs, fee bps, or other uint fields. */
+export function findQuantityParamName(fn: AbiFunction): string | null {
+  const match = fn.inputs.find(
+    (input): input is AbiParameter & { name: string } =>
+      (input.type.startsWith("uint") || input.type.startsWith("int")) &&
+      !!input.name &&
+      QUANTITY_PARAM_NAME_HINTS.some((hint) => input.name!.toLowerCase().includes(hint))
+  );
+  return match?.name ?? null;
+}
+
+/**
+ * The payable value for one call: pricePerMint × quantity when the function
+ * takes an explicit quantity argument (several NFTs minted in a single
+ * call, e.g. SeaDrop's mintPublic), otherwise just pricePerMint (one NFT
+ * per call, the more common case). Without this, any quantity > 1 call
+ * would send too little ETH and revert on-chain.
+ */
+export function computeMintValue(
+  fn: AbiFunction,
+  staticArgs: Record<string, unknown>,
+  priceWeiPerMint: bigint
+): bigint {
+  const quantityParam = findQuantityParamName(fn);
+  if (!quantityParam) return priceWeiPerMint;
+  const raw = staticArgs[quantityParam];
+  if (raw === undefined || raw === null || String(raw).trim() === "") return priceWeiPerMint;
+  try {
+    const quantity = BigInt(String(raw));
+    return quantity > 0n ? priceWeiPerMint * quantity : priceWeiPerMint;
+  } catch {
+    return priceWeiPerMint;
+  }
 }
 
 /** Coerce a user-typed string into the JS/viem value a given Solidity type expects. */

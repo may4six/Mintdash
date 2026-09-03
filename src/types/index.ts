@@ -22,6 +22,7 @@ export interface CampaignDTO {
   abi: unknown;
   mintFunctionName: string;
   recipientParam: string | null;
+  staticArgValues: Record<string, unknown> | null;
   phase: MintPhase;
   priceWeiPerMint: string;
   maxPerWallet: number | null;
@@ -79,6 +80,57 @@ export interface ActivityEventDTO {
   message: string;
   metadata: Record<string, unknown> | null;
   createdAt: string;
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Sniper / automation
+// ─────────────────────────────────────────────────────────────────────────
+
+export type SniperType = "NFT" | "TOKEN";
+export type AutomationMode = "SHADOW" | "MANUAL";
+export type MatchStatus = "OBSERVED" | "ARMED" | "EXECUTED" | "SKIPPED" | "EXPIRED";
+
+export interface AutomationSettingsDTO {
+  userId: string;
+  automationEnabled: boolean;
+  maxSpendPerDayWei: string | null;
+  maxGasPriceWei: string | null;
+  maxConcurrentRuns: number;
+  updatedAt: string;
+}
+
+export interface SniperRuleDTO {
+  id: string;
+  userId: string;
+  type: SniperType;
+  chainId: number;
+  name: string;
+  enabled: boolean;
+  maxPriceWei: string;
+  maxGasPriceWei: string | null;
+  quantityPerWallet: number;
+  operatorWalletId: string;
+  config: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+  operator?: WalletDTO;
+  receivers?: { id: string; walletId: string; wallet?: WalletDTO }[];
+  _count?: { matches: number };
+}
+
+export interface SniperMatchDTO {
+  id: string;
+  ruleId: string;
+  userId: string;
+  contractAddress: string;
+  chainId: number;
+  status: MatchStatus;
+  detectedAt: string;
+  armedAt: string | null;
+  executedRunId: string | null;
+  skipReason: string | null;
+  metadata: Record<string, unknown> | null;
+  rule?: SniperRuleDTO;
 }
 
 /** Per-receiver preflight verdict returned by POST /api/preflight. */

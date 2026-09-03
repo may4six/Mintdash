@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useCallback, useEffect, useState } from "react";
 import { useAccount, useWalletClient } from "wagmi";
@@ -16,17 +16,19 @@ import { getChainMeta, getRpcUrl } from "@/lib/constants";
 
 export type OperatorSignerMode = "connected" | "local-locked" | "local-unlocked" | "none";
 
+/** Wallets (MetaMask included) usually export private keys WITHOUT the 0x
+ * prefix. Accept either form, validate it's actually 32 bytes of hex, and
+ * give a clear error instead of viem's low-level one when it isn't. */
 function normalizePrivateKey(raw: string): `0x${string}` {
-  const trimmed = raw.trim().replace(/^["']|["']$/g, "");
-  const withPrefix =
-    trimmed.startsWith("0x") || trimmed.startsWith("0X") ? trimmed : `0x${trimmed}`;
+  const trimmed = raw.trim();
+  const withPrefix = trimmed.startsWith("0x") || trimmed.startsWith("0X") ? trimmed : `0x${trimmed}`;
   const hexBody = withPrefix.slice(2);
   if (!/^[0-9a-fA-F]{64}$/.test(hexBody)) {
     throw new Error(
-      "Invalid private key: expected 64 hex characters (with or without 0x prefix)."
+      "That private key looks incomplete or has extra characters — it should be exactly 64 hex characters, with or without a leading 0x."
     );
   }
-  return (`0x${hexBody.toLowerCase()}`) as `0x${string}`;
+  return withPrefix.toLowerCase() as `0x${string}`;
 }
 
 interface UseOperatorSignerResult {
@@ -40,31 +42,29 @@ interface UseOperatorSignerResult {
   getWalletClient: () => Promise<WalletClient>;
 }
 
-export function useOperatorSigner(
-  operatorAddress: Address | null,
-  chainId: number
-): UseOperatorSignerResult {
+export function useOperatorSigner(operatorAddress: Address | null, chainId: number): UseOperatorSignerResult {
   const { address: connectedAddress } = useAccount();
   const { data: connectedWalletClient } = useWalletClient({ chainId });
   const [unlockedKey, setUnlockedKey] = useState<`0x${string}` | null>(null);
   const [unlockedFor, setUnlockedFor] = useState<Address | null>(null);
-  const [hasLocalSigner, setHasLocalSigner] = useState(false);
 
+  // localStorage isn't available during SSR, and reading it synchronously
+  // in the render body would make the server-rendered markup disagree with
+  // the client's first render — start false everywhere, then correct after
+  // mount, which only ever causes an extra client-side re-render, not a
+  // hydration mismatch warning.
+  const [hasLocalSigner, setHasLocalSigner] = useState(false);
   useEffect(() => {
     setHasLocalSigner(!!operatorAddress && hasEncryptedSigner(operatorAddress));
+    // Selecting a different operator invalidates any previously-unlocked key.
     setUnlockedKey(null);
     setUnlockedFor(null);
   }, [operatorAddress]);
 
   const isConnectedMatch =
-    !!operatorAddress &&
-    !!connectedAddress &&
-    connectedAddress.toLowerCase() === operatorAddress.toLowerCase();
-
+    !!operatorAddress && !!connectedAddress && connectedAddress.toLowerCase() === operatorAddress.toLowerCase();
   const isLocalUnlocked =
-    !!unlockedKey &&
-    !!operatorAddress &&
-    unlockedFor?.toLowerCase() === operatorAddress.toLowerCase();
+    !!unlockedKey && !!operatorAddress && unlockedFor?.toLowerCase() === operatorAddress.toLowerCase();
 
   const mode: OperatorSignerMode = isConnectedMatch
     ? "connected"
@@ -80,9 +80,7 @@ export function useOperatorSigner(
       const privateKeyHex = normalizePrivateKey(rawPrivateKey);
       const account = privateKeyToAccount(privateKeyHex);
       if (account.address.toLowerCase() !== operatorAddress.toLowerCase()) {
-        throw new Error(
-          `That key belongs to ${account.address}, not the selected Operator ${operatorAddress}.`
-        );
+        throw new Error(`That key belongs to ${account.address}, not the selected Operator ${operatorAddress}.`);
       }
       const record = await encryptPrivateKey(operatorAddress, privateKeyHex, passphrase);
       saveEncryptedSigner(record);
@@ -124,16 +122,9 @@ export function useOperatorSigner(
     if (isLocalUnlocked && unlockedKey) {
       const meta = getChainMeta(chainId);
       const account = privateKeyToAccount(unlockedKey);
-      const rpc = getRpcUrl(chainId);
-      return createWalletClient({
-        account,
-        chain: meta.chain,
-        transport: http(rpc),
-      });
+      return createWalletClient({ account, chain: meta.chain, transport: http(getRpcUrl(chainId)) });
     }
-    throw new Error(
-      "Operator wallet isn't ready to sign - connect it or unlock the local signer first."
-    );
+    throw new Error("Operator wallet isn't ready to sign — connect it or unlock the local signer first.");
   }, [isConnectedMatch, connectedWalletClient, isLocalUnlocked, unlockedKey, chainId]);
 
   return {

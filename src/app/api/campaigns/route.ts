@@ -55,6 +55,7 @@ export async function POST(req: NextRequest) {
         abi: input.abi as unknown as Prisma.InputJsonValue,
         mintFunctionName: input.mintFunctionName,
         recipientParam: input.recipientParam,
+        staticArgValues: input.staticArgValues as unknown as Prisma.InputJsonValue,
         phase: input.phase,
         priceWeiPerMint: input.priceWeiPerMint,
         maxPerWallet: input.maxPerWallet ?? null,

@@ -1,52 +1,5 @@
-﻿import {
-  mainnet,
-  sepolia,
-  base,
-  baseSepolia,
-  arbitrum,
-  arbitrumSepolia,
-  optimism,
-  optimismSepolia,
-  polygon,
-  polygonAmoy,
-} from "wagmi/chains";
-import { defineChain, type Chain } from "viem";
-
-/** Robinhood Chain (EVM L2, chain id 4663) — not in default wagmi/chains */
-export const robinhood = defineChain({
-  id: 4663,
-  name: "Robinhood Chain",
-  nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-  rpcUrls: {
-    default: {
-      http: ["https://rpc.mainnet.chain.robinhood.com"],
-    },
-  },
-  blockExplorers: {
-    default: {
-      name: "Blockscout",
-      url: "https://robinhoodchain.blockscout.com",
-    },
-  },
-});
-
-export const robinhoodTestnet = defineChain({
-  id: 46630,
-  name: "Robinhood Chain Testnet",
-  nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-  rpcUrls: {
-    default: {
-      http: ["https://rpc.testnet.chain.robinhood.com"],
-    },
-  },
-  blockExplorers: {
-    default: {
-      name: "Blockscout",
-      url: "https://explorer.testnet.chain.robinhood.com",
-    },
-  },
-  testnet: true,
-});
+import { mainnet, sepolia } from "wagmi/chains";
+import type { Chain } from "viem";
 
 export interface ChainMeta {
   id: number;
@@ -55,6 +8,8 @@ export interface ChainMeta {
   shortLabel: string;
   isTestnet: boolean;
   explorerBase: string;
+  /** Alchemy's network subdomain slug for this chain, e.g. "eth-mainnet".
+   * Used to build this chain's RPC URL from one shared API key — see getRpcUrl(). */
   alchemyNetwork: string;
 }
 
@@ -63,55 +18,10 @@ export const SUPPORTED_CHAINS: ChainMeta[] = [
     id: mainnet.id,
     chain: mainnet,
     label: "Ethereum Mainnet",
-    shortLabel: "Ethereum",
+    shortLabel: "Mainnet",
     isTestnet: false,
     explorerBase: "https://etherscan.io",
     alchemyNetwork: "eth-mainnet",
-  },
-  {
-    id: base.id,
-    chain: base,
-    label: "Base",
-    shortLabel: "Base",
-    isTestnet: false,
-    explorerBase: "https://basescan.org",
-    alchemyNetwork: "base-mainnet",
-  },
-  {
-    id: arbitrum.id,
-    chain: arbitrum,
-    label: "Arbitrum One",
-    shortLabel: "Arbitrum",
-    isTestnet: false,
-    explorerBase: "https://arbiscan.io",
-    alchemyNetwork: "arb-mainnet",
-  },
-  {
-    id: optimism.id,
-    chain: optimism,
-    label: "Optimism",
-    shortLabel: "Optimism",
-    isTestnet: false,
-    explorerBase: "https://optimistic.etherscan.io",
-    alchemyNetwork: "opt-mainnet",
-  },
-  {
-    id: polygon.id,
-    chain: polygon,
-    label: "Polygon",
-    shortLabel: "Polygon",
-    isTestnet: false,
-    explorerBase: "https://polygonscan.com",
-    alchemyNetwork: "polygon-mainnet",
-  },
-  {
-    id: robinhood.id,
-    chain: robinhood,
-    label: "Robinhood Chain",
-    shortLabel: "Robinhood",
-    isTestnet: false,
-    explorerBase: "https://robinhoodchain.blockscout.com",
-    alchemyNetwork: "robinhood-mainnet",
   },
   {
     id: sepolia.id,
@@ -122,69 +32,25 @@ export const SUPPORTED_CHAINS: ChainMeta[] = [
     explorerBase: "https://sepolia.etherscan.io",
     alchemyNetwork: "eth-sepolia",
   },
-  {
-    id: baseSepolia.id,
-    chain: baseSepolia,
-    label: "Base Sepolia",
-    shortLabel: "Base Sepolia",
-    isTestnet: true,
-    explorerBase: "https://sepolia.basescan.org",
-    alchemyNetwork: "base-sepolia",
-  },
-  {
-    id: arbitrumSepolia.id,
-    chain: arbitrumSepolia,
-    label: "Arbitrum Sepolia",
-    shortLabel: "Arb Sepolia",
-    isTestnet: true,
-    explorerBase: "https://sepolia.arbiscan.io",
-    alchemyNetwork: "arb-sepolia",
-  },
-  {
-    id: optimismSepolia.id,
-    chain: optimismSepolia,
-    label: "Optimism Sepolia",
-    shortLabel: "OP Sepolia",
-    isTestnet: true,
-    explorerBase: "https://sepolia-optimism.etherscan.io",
-    alchemyNetwork: "opt-sepolia",
-  },
-  {
-    id: polygonAmoy.id,
-    chain: polygonAmoy,
-    label: "Polygon Amoy",
-    shortLabel: "Amoy",
-    isTestnet: true,
-    explorerBase: "https://amoy.polygonscan.com",
-    alchemyNetwork: "polygon-amoy",
-  },
-  {
-    id: robinhoodTestnet.id,
-    chain: robinhoodTestnet,
-    label: "Robinhood Testnet",
-    shortLabel: "RH Testnet",
-    isTestnet: true,
-    explorerBase: "https://explorer.testnet.chain.robinhood.com",
-    alchemyNetwork: "robinhood-testnet",
-  },
 ];
 
 export const DEFAULT_CHAIN_ID = sepolia.id;
 
-/** Basis points added on top of estimated gas (e.g. 2000 = +20%) */
-export const GAS_SAFETY_MARGIN_BPS = 2000n;
-
 export function getChainMeta(chainId: number): ChainMeta {
   const meta = SUPPORTED_CHAINS.find((c) => c.id === chainId);
   if (!meta) {
-    throw new Error(
-      `Unsupported chainId: ${chainId}. Add it to SUPPORTED_CHAINS in src/lib/constants.ts.`
-    );
+    throw new Error(`Unsupported chainId: ${chainId}. Add it to SUPPORTED_CHAINS in src/lib/constants.ts.`);
   }
   return meta;
 }
 
-/** Build Alchemy HTTPS RPC from one NEXT_PUBLIC_ALCHEMY_API_KEY */
+/**
+ * Builds this chain's RPC URL from a single Alchemy API key, so supporting a
+ * new chain never means adding a new env var — just a new SUPPORTED_CHAINS
+ * entry with its Alchemy network slug, plus enabling that network for the
+ * key in the Alchemy dashboard. Returns undefined (falls back to a public
+ * RPC) if the chain isn't in SUPPORTED_CHAINS or the key isn't set.
+ */
 export function getRpcUrl(chainId: number): string | undefined {
   const apiKey = process.env.NEXT_PUBLIC_ALCHEMY_API_KEY;
   if (!apiKey) return undefined;
@@ -194,62 +60,63 @@ export function getRpcUrl(chainId: number): string | undefined {
 }
 
 export function explorerAddressUrl(chainId: number, address: string): string {
-  const meta = getChainMeta(chainId);
-  return `${meta.explorerBase}/address/${address}`;
+  return `${getChainMeta(chainId).explorerBase}/address/${address}`;
 }
 
-export function explorerTxUrl(chainId: number, txHash: string): string {
-  const meta = getChainMeta(chainId);
-  return `${meta.explorerBase}/tx/${txHash}`;
+export function explorerTxUrl(chainId: number, hash: string): string {
+  return `${getChainMeta(chainId).explorerBase}/tx/${hash}`;
 }
 
-/** Common mint function name hints for ABI detection */
+/** Name fragments used to rank which ABI functions are likely mint entrypoints. */
 export const MINT_FUNCTION_NAME_HINTS = [
   "mint",
-  "mintTo",
-  "safeMint",
-  "publicMint",
+  "publicmint",
+  "whitelistmint",
+  "allowlistmint",
+  "presalemint",
   "claim",
-  "claimTo",
+  "safemint",
+  "purchase",
 ] as const;
 
-/** Param names that usually mean “recipient / to” */
+/** Param name fragments used to detect an explicit mint-recipient argument. */
 export const RECIPIENT_PARAM_NAME_HINTS = [
   "to",
-  "to_",
   "recipient",
+  "receiver",
   "account",
-  "addr",
-  "address",
+  "wallet",
+  "beneficiary",
+  "minter",
 ] as const;
 
-/** View names used for allowlist / eligibility checks */
+/** View-function name fragments checked as a best-effort whitelist signal. */
 export const ELIGIBILITY_VIEW_NAME_HINTS = [
-  "isEligible",
-  "canMint",
-  "isWhitelisted",
-  "whitelist",
+  "iswhitelisted",
+  "isallowlisted",
+  "iseligible",
   "allowlist",
-  "balanceOf",
+  "whitelist",
 ] as const;
 
-/** Activity feed event type keys used by API routes */
 export const ACTIVITY_EVENT_TYPES = {
-  CAMPAIGN_CREATED: "CAMPAIGN_CREATED",
-  CAMPAIGN_UPDATED: "CAMPAIGN_UPDATED",
-  RUN_STARTED: "RUN_STARTED",
-  RUN_COMPLETED: "RUN_COMPLETED",
-  RUN_FAILED: "RUN_FAILED",
-  RUN_CANCELLED: "RUN_CANCELLED",
-  ITEM_SUBMITTED: "ITEM_SUBMITTED",
-  ITEM_CONFIRMED: "ITEM_CONFIRMED",
-  ITEM_FAILED: "ITEM_FAILED",
-  MINT_SUCCESS: "MINT_SUCCESS",
-  MINT_FAILED: "MINT_FAILED",
-  WALLET_ADDED: "WALLET_ADDED",
-  WALLET_REMOVED: "WALLET_REMOVED",
-  WALLET_UPDATED: "WALLET_UPDATED",
+  WALLET_ADDED: "wallet_added",
+  WALLET_REMOVED: "wallet_removed",
+  CAMPAIGN_CREATED: "campaign_created",
+  RUN_STARTED: "run_started",
+  ITEM_SUBMITTED: "item_submitted",
+  ITEM_CONFIRMED: "item_confirmed",
+  ITEM_FAILED: "item_failed",
+  RUN_COMPLETED: "run_completed",
+  SNIPER_RULE_CREATED: "sniper_rule_created",
+  SNIPER_MATCH_OBSERVED: "sniper_match_observed",
+  SNIPER_MATCH_SKIPPED: "sniper_match_skipped",
+  SNIPER_MATCH_ARMED: "sniper_match_armed",
+  SNIPER_SNIPE_EXECUTED: "sniper_snipe_executed",
+  AUTOMATION_TOGGLED: "automation_toggled",
 } as const;
 
-export type ActivityEventType =
-  (typeof ACTIVITY_EVENT_TYPES)[keyof typeof ACTIVITY_EVENT_TYPES];
+export type ActivityEventType = (typeof ACTIVITY_EVENT_TYPES)[keyof typeof ACTIVITY_EVENT_TYPES];
+
+/** Conservative default so a preflight pass still leaves headroom for gas-price drift. */
+export const GAS_SAFETY_MARGIN_BPS = 1500; // +15%

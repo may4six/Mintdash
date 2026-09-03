@@ -48,6 +48,7 @@ export const createCampaignSchema = z.object({
   abi: abiJsonSchema,
   mintFunctionName: z.string().trim().min(1, "Select a mint function"),
   recipientParam: z.string().trim().nullable(),
+  staticArgValues: z.record(z.string(), z.unknown()).default({}),
   phase: mintPhaseSchema,
   priceWeiPerMint: weiStringSchema,
   maxPerWallet: z.number().int().positive().nullable().optional(),
@@ -106,3 +107,49 @@ export const logActivitySchema = z.object({
   metadata: z.record(z.string(), z.unknown()).optional(),
 });
 export type LogActivityInput = z.infer<typeof logActivitySchema>;
+
+// ─────────────────────────────────────────────────────────────────────────
+// Sniper / automation
+// ─────────────────────────────────────────────────────────────────────────
+
+export const automationSettingsSchema = z.object({
+  automationEnabled: z.boolean(),
+  maxSpendPerDayWei: weiStringSchema.optional().nullable(),
+  maxGasPriceWei: weiStringSchema.optional().nullable(),
+  maxConcurrentRuns: z.number().int().min(1).max(20).default(1),
+});
+export type AutomationSettingsInput = z.infer<typeof automationSettingsSchema>;
+
+export const sniperTypeSchema = z.enum(["NFT", "TOKEN"]);
+export const automationModeSchema = z.enum(["SHADOW", "MANUAL"]);
+export const matchStatusSchema = z.enum(["OBSERVED", "ARMED", "EXECUTED", "SKIPPED", "EXPIRED"]);
+
+export const createSniperRuleSchema = z.object({
+  type: sniperTypeSchema,
+  chainId: chainIdSchema,
+  name: z.string().trim().min(1).max(100),
+  maxPriceWei: weiStringSchema,
+  maxGasPriceWei: weiStringSchema.optional(),
+  quantityPerWallet: z.number().int().min(1).max(50).default(1),
+  operatorWalletId: z.string().min(1),
+  receiverWalletIds: z.array(z.string().min(1)).min(1),
+  config: z.record(z.string(), z.unknown()).default({}),
+});
+export type CreateSniperRuleInput = z.infer<typeof createSniperRuleSchema>;
+
+export const updateSniperRuleSchema = z.object({
+  name: z.string().trim().min(1).max(100).optional(),
+  enabled: z.boolean().optional(),
+  maxPriceWei: weiStringSchema.optional(),
+  maxGasPriceWei: weiStringSchema.optional().nullable(),
+  quantityPerWallet: z.number().int().min(1).max(50).optional(),
+  config: z.record(z.string(), z.unknown()).optional(),
+});
+export type UpdateSniperRuleInput = z.infer<typeof updateSniperRuleSchema>;
+
+export const updateSniperMatchSchema = z.object({
+  status: matchStatusSchema,
+  skipReason: z.string().max(280).optional(),
+  executedRunId: z.string().optional(),
+});
+export type UpdateSniperMatchInput = z.infer<typeof updateSniperMatchSchema>;

@@ -40,7 +40,7 @@ export function RunCampaignPanel({ campaign }: { campaign: CampaignDTO }) {
     abi: campaign.abi as unknown as Abi,
     functionName: campaign.mintFunctionName,
     recipientParam: campaign.recipientParam ?? "",
-    staticArgs: {},
+    staticArgs: campaign.staticArgValues ?? {},
     priceWeiPerMint: BigInt(campaign.priceWeiPerMint || "0"),
     maxFeePerGasWei: maxFeeGwei ? parseUnits(maxFeeGwei, 9) : undefined,
     maxPriorityFeePerGasWei: priorityFeeGwei ? parseUnits(priorityFeeGwei, 9) : undefined,
@@ -94,7 +94,7 @@ export function RunCampaignPanel({ campaign }: { campaign: CampaignDTO }) {
     if (!operatorWallet) return;
     const receivers = (campaign.receivers ?? [])
       .filter((r) => selectedReceiverIds.includes(r.walletId) && r.wallet)
-      .map((r) => ({ walletId: r.walletId, address: r.wallet!.address }));
+      .map((r) => ({ walletId: r.walletId, address: r.wallet!.address as Address }));
 
     preflight.mutate(
       {
@@ -103,14 +103,11 @@ export function RunCampaignPanel({ campaign }: { campaign: CampaignDTO }) {
         abi: campaign.abi as unknown as Record<string, unknown>[],
         mintFunctionName: campaign.mintFunctionName,
         recipientParam: campaign.recipientParam,
-        staticArgs: {},
+        staticArgs: campaign.staticArgValues ?? {},
         phase: campaign.phase,
         priceWeiPerMint: campaign.priceWeiPerMint,
-        operatorAddress: operatorWallet.address as `0x${string}`,
-        receivers: receivers.map((r) => ({
-          ...r,
-          address: r.address as `0x${string}`,
-        })),
+        operatorAddress: operatorWallet.address as Address,
+        receivers,
       },
       {
         onSuccess: (result) => {

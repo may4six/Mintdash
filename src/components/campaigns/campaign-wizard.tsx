@@ -30,8 +30,9 @@ import {
   getLikelyMintFunctions,
   findAbiFunction,
   findRecipientParamName,
-  coerceArgValue,
   requiresReceiverSignature,
+  buildCallArgs,
+  computeMintValue,
 } from "@/lib/contracts/abi";
 import { abiJsonSchema, createCampaignSchema } from "@/lib/validations";
 import { explorerTxUrl } from "@/lib/constants";
@@ -124,12 +125,7 @@ export function CampaignWizard({ chainId }: { chainId: number }) {
     if (!selectedFn) return out;
     for (const input of otherInputs) {
       if (!input.name) continue;
-      const raw = staticArgValues[input.name] ?? "";
-      try {
-        out[input.name] = coerceArgValue(input.type, raw);
-      } catch {
-        out[input.name] = raw;
-      }
+      out[input.name] = staticArgValues[input.name] ?? "";
     }
     return out;
   }, [selectedFn, otherInputs, staticArgValues]);
@@ -222,6 +218,7 @@ export function CampaignWizard({ chainId }: { chainId: number }) {
         abi: parsedAbi as unknown as Record<string, unknown>[],
         mintFunctionName: selectedFunctionName,
         recipientParam,
+        staticArgValues: staticArgs,
         phase,
         priceWeiPerMint: safeParseEther(priceEth).toString(),
         maxPerWallet: null,
@@ -249,7 +246,7 @@ export function CampaignWizard({ chainId }: { chainId: number }) {
     const receivers = selectedReceiverIds
       .map((id) => receiverWallets?.find((w) => w.id === id))
       .filter((w): w is NonNullable<typeof w> => !!w)
-      .map((w) => ({ walletId: w.id, address: w.address }));
+      .map((w) => ({ walletId: w.id, address: w.address as Address }));
 
     preflight.mutate(
       {
@@ -261,11 +258,8 @@ export function CampaignWizard({ chainId }: { chainId: number }) {
         staticArgs,
         phase,
         priceWeiPerMint: safeParseEther(priceEth).toString(),
-        operatorAddress: operatorWallet.address as `0x${string}`,
-        receivers: receivers.map((r) => ({
-          ...r,
-          address: r.address as `0x${string}`,
-        })),
+        operatorAddress: operatorWallet.address as Address,
+        receivers,
       },
       {
         onSuccess: (result) => {
@@ -676,19 +670,20 @@ function SelfSignReceiverRow({
   const { writeContractAsync, isPending } = useWriteContract();
   const publicClient = usePublicClient({ chainId });
   const isMatch = connectedAddress?.toLowerCase() === item.address.toLowerCase();
+  const fn = findAbiFunction(abi, functionName);
 
   async function handleMint() {
-    if (!publicClient) return;
+    if (!publicClient || !fn) return;
     onChange({ ...item, status: "PENDING", errorMessage: undefined });
     try {
-      const args = Object.values(staticArgs);
+      const args = buildCallArgs(fn, null, item.address, staticArgs);
       const hash = await writeContractAsync({
         address: contractAddress,
         abi,
         functionName,
         args,
         chainId,
-        value: isPayable ? priceWei : undefined,
+        value: isPayable ? computeMintValue(fn, staticArgs, priceWei) : undefined,
       });
       onChange({ ...item, status: "SUBMITTED", txHash: hash });
       const receipt = await publicClient.waitForTransactionReceipt({ hash });

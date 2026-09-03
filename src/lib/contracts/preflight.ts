@@ -1,6 +1,6 @@
-﻿import { createPublicClient, http, type Abi, type Address } from "viem";
+import { createPublicClient, http, type Abi, type Address } from "viem";
 import { getChainMeta, getRpcUrl, GAS_SAFETY_MARGIN_BPS } from "@/lib/constants";
-import { findAbiFunction, findEligibilityView, buildCallArgs, requiresReceiverSignature } from "@/lib/contracts/abi";
+import { findAbiFunction, findEligibilityView, buildCallArgs, requiresReceiverSignature, computeMintValue } from "@/lib/contracts/abi";
 import { extractRevertReason } from "@/lib/contracts/errors";
 import type { PreflightRequest } from "@/lib/validations";
 import type { EligibilityStatus, PreflightReceiverResult, PreflightResult } from "@/types";
@@ -14,7 +14,7 @@ function getServerPublicClient(chainId: number) {
 }
 
 function applyMargin(gas: bigint): bigint {
-  return (gas * (10_000n + GAS_SAFETY_MARGIN_BPS)) / 10_000n;
+  return (gas * BigInt(10_000 + GAS_SAFETY_MARGIN_BPS)) / 10_000n;
 }
 
 export async function runPreflight(req: PreflightRequest): Promise<PreflightResult> {
@@ -58,10 +58,10 @@ export async function runPreflight(req: PreflightRequest): Promise<PreflightResu
           eligibility = isEligible ? "ELIGIBLE" : "INELIGIBLE";
           eligibilityNote = `Checked on-chain via ${eligibilityView.name}(address)`;
         } catch {
-          eligibilityNote = `Could not call ${eligibilityView.name} â€” verify eligibility manually`;
+          eligibilityNote = `Could not call ${eligibilityView.name} — verify eligibility manually`;
         }
       } else {
-        eligibilityNote = "No on-chain eligibility view detected in this ABI â€” verify against the project's allowlist yourself before running.";
+        eligibilityNote = "No on-chain eligibility view detected in this ABI — verify against the project's allowlist yourself before running.";
       }
     }
 
@@ -93,7 +93,7 @@ export async function runPreflight(req: PreflightRequest): Promise<PreflightResu
 
     // When there's no recipient param, msg.sender must be the receiver
     // itself, so we simulate as the receiver rather than the operator.
-    // This is still a read-only eth_call/estimateGas â€” no signature or
+    // This is still a read-only eth_call/estimateGas — no signature or
     // private key needed to simulate "what if this address called it".
     const simulatedCaller = needsReceiverSig ? (receiver.address as Address) : (req.operatorAddress as Address);
 
@@ -105,7 +105,7 @@ export async function runPreflight(req: PreflightRequest): Promise<PreflightResu
         functionName: fn.name,
         args,
         account: simulatedCaller,
-        value: fn.stateMutability === "payable" ? priceWei : undefined,
+        value: fn.stateMutability === "payable" ? computeMintValue(fn, req.staticArgs, priceWei) : undefined,
       });
       const gasWithMargin = applyMargin(gas);
       if (!needsReceiverSig) {
@@ -117,7 +117,7 @@ export async function runPreflight(req: PreflightRequest): Promise<PreflightResu
         gasEstimateWei: gasWithMargin.toString(),
         eligibility,
         eligibilityNote: needsReceiverSig
-          ? [eligibilityNote, "This function has no recipient param â€” the receiver must sign and pay its own gas for this mint."]
+          ? [eligibilityNote, "This function has no recipient param — the receiver must sign and pay its own gas for this mint."]
               .filter(Boolean)
               .join(" ")
           : eligibilityNote,
