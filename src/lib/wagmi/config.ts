@@ -1,32 +1,51 @@
 import { http, createConfig, fallback } from "wagmi";
 import { injected, walletConnect } from "wagmi/connectors";
-import { mainnet, sepolia } from "wagmi/chains";
-import { getRpcUrl } from "@/lib/constants";
+import {
+  mainnet,
+  sepolia,
+  base,
+  baseSepolia,
+  arbitrum,
+  arbitrumSepolia,
+  optimism,
+  optimismSepolia,
+  polygon,
+  polygonAmoy,
+} from "wagmi/chains";
+import { getRpcUrl, robinhood, robinhoodTestnet } from "@/lib/constants";
 
 const walletConnectProjectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID;
 
+const chains = [
+  mainnet, base, arbitrum, optimism, polygon, robinhood,
+  sepolia, baseSepolia, arbitrumSepolia, optimismSepolia, polygonAmoy, robinhoodTestnet,
+] as const;
+
+function transportFor(chainId: number) {
+  const alchemyUrl = getRpcUrl(chainId);
+  return fallback([...(alchemyUrl ? [http(alchemyUrl)] : []), http()]);
+}
+
 export const wagmiConfig = createConfig({
-  chains: [mainnet, sepolia],
+  chains,
   connectors: [
     injected(),
-    // Only registered if a project ID is configured — an unconfigured
-    // WalletConnect connector throws at connect-time, so we'd rather it
-    // not appear as an option at all than appear and fail.
     ...(walletConnectProjectId
       ? [walletConnect({ projectId: walletConnectProjectId, showQrModal: true })]
       : []),
   ],
   transports: {
-    // fallback() tries Alchemy first (built from NEXT_PUBLIC_ALCHEMY_API_KEY)
-    // and drops to the chain's public default if the key's unset or errors,
-    // so the app still works (rate-limited) before a key is configured.
-    [mainnet.id]: fallback([
-      ...(getRpcUrl(mainnet.id) ? [http(getRpcUrl(mainnet.id))] : []),
-      http(),
-    ]),
-    [sepolia.id]: fallback([
-      ...(getRpcUrl(sepolia.id) ? [http(getRpcUrl(sepolia.id))] : []),
-      http(),
-    ]),
+    [mainnet.id]: transportFor(mainnet.id),
+    [base.id]: transportFor(base.id),
+    [arbitrum.id]: transportFor(arbitrum.id),
+    [optimism.id]: transportFor(optimism.id),
+    [polygon.id]: transportFor(polygon.id),
+    [robinhood.id]: transportFor(robinhood.id),
+    [sepolia.id]: transportFor(sepolia.id),
+    [baseSepolia.id]: transportFor(baseSepolia.id),
+    [arbitrumSepolia.id]: transportFor(arbitrumSepolia.id),
+    [optimismSepolia.id]: transportFor(optimismSepolia.id),
+    [polygonAmoy.id]: transportFor(polygonAmoy.id),
+    [robinhoodTestnet.id]: transportFor(robinhoodTestnet.id),
   },
 });
