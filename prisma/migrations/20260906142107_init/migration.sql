@@ -1,4 +1,4 @@
-﻿-- CreateEnum
+-- CreateEnum
 CREATE TYPE "WalletRole" AS ENUM ('OPERATOR', 'RECEIVER');
 
 -- CreateEnum
@@ -298,4 +298,3 @@ ALTER TABLE "SniperMatch" ADD CONSTRAINT "SniperMatch_ruleId_fkey" FOREIGN KEY (
 
 -- AddForeignKey
 ALTER TABLE "CopyObservation" ADD CONSTRAINT "CopyObservation_watchId_fkey" FOREIGN KEY ("watchId") REFERENCES "CopyWatch"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
