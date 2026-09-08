@@ -26,7 +26,13 @@ export async function GET(req: NextRequest) {
       where: { userId, ...(ruleId ? { ruleId } : {}), ...(status ? { status } : {}) },
       orderBy: { detectedAt: "desc" },
       take: limit,
-      include: { rule: true },
+      include: {
+        rule: {
+          include: {
+            receivers: true,
+          },
+        },
+      },
     });
 
     return NextResponse.json({ matches });
