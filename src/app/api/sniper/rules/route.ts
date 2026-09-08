@@ -60,6 +60,7 @@ export async function POST(req: NextRequest) {
         maxGasPriceWei: input.maxGasPriceWei,
         quantityPerWallet: input.quantityPerWallet,
         operatorWalletId: input.operatorWalletId,
+        autoExecute: input.autoExecute,
         config: input.config as unknown as Prisma.InputJsonValue,
         // enabled starts false regardless of the request — arming a rule is
         // a deliberate, separate action from creating it.

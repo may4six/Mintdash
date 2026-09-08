@@ -81,6 +81,13 @@ export function useNftSniper(chainId: number) {
                 maxPerWallet: drop.maxPerWallet,
                 startTime: drop.startTime,
                 endTime: drop.endTime,
+
+                feeBps: drop.feeBps,
+                restrictFeeRecipients: drop.restrictFeeRecipients,
+
+                feeRecipient: drop.feeRecipient,
+                feeRecipientSource: drop.feeRecipientSource,
+                feeRecipientReason: drop.feeRecipientReason ?? null,
               },
             }),
           });

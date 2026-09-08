@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/misc";
 import { ArmSnipeDialog } from "@/components/sniper/arm-snipe-dialog";
+import { AutoSnipeRunner } from "@/components/sniper/auto-snipe-runner";
 import { shortenAddress, formatWeiToEth, timeAgo } from "@/lib/utils";
 import { explorerAddressUrl } from "@/lib/constants";
 import type { SniperMatchDTO, MatchStatus } from "@/types";
@@ -31,59 +32,75 @@ export function MatchFeed({ matches, onChanged }: { matches: SniperMatchDTO[]; o
       <EmptyState
         icon={Target}
         title="No matches yet"
-        description="Turn automation on and enable at least one rule above — matches will appear here as they're detected, and nothing fires until you click Snipe."
+        description="Turn automation on and enable at least one rule above — matches will appear here as they're detected."
       />
     );
   }
 
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Contract</TableHead>
-          <TableHead>Price</TableHead>
-          <TableHead>Detected</TableHead>
-          <TableHead>Status</TableHead>
-          <TableHead className="text-right">Action</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {matches.map((match) => (
-          <TableRow key={match.id}>
-            <TableCell>
-              <a
-                href={explorerAddressUrl(match.chainId, match.contractAddress)}
-                target="_blank"
-                rel="noreferrer"
-                className="font-mono text-xs text-primary hover:underline"
-              >
-                {shortenAddress(match.contractAddress)}
-              </a>
-            </TableCell>
-            <TableCell className="font-mono text-xs text-muted-foreground">
-              {match.metadata?.mintPriceWei ? `${formatWeiToEth(String(match.metadata.mintPriceWei))} ETH` : "—"}
-            </TableCell>
-            <TableCell className="text-xs text-muted-foreground">{timeAgo(match.detectedAt)}</TableCell>
-            <TableCell>
-              <MatchStatusBadge status={match.status} />
-            </TableCell>
-            <TableCell className="text-right">
-              {match.status === "OBSERVED" && (
-                <div className="flex items-center justify-end gap-2">
-                  <Button variant="ghost" size="sm" onClick={() => handleSkip(match)}>
-                    <Ban className="h-3.5 w-3.5" aria-hidden="true" /> Skip
-                  </Button>
-                  <ArmSnipeDialog match={match} />
-                </div>
-              )}
-              {match.status !== "OBSERVED" && match.skipReason && (
-                <span className="text-xs text-muted-foreground">{match.skipReason}</span>
-              )}
-            </TableCell>
-          </TableRow>
+    <>
+      {/* Invisible runners: fire only when rule.autoExecute is on and match is OBSERVED */}
+      {matches
+        .filter((m) => m.status === "OBSERVED" && m.rule?.autoExecute)
+        .map((m) => (
+          <AutoSnipeRunner key={`auto-${m.id}`} match={m} onChanged={onChanged} />
         ))}
-      </TableBody>
-    </Table>
+
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Contract</TableHead>
+            <TableHead>Price</TableHead>
+            <TableHead>Detected</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead className="text-right">Action</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {matches.map((match) => (
+            <TableRow key={match.id}>
+              <TableCell>
+                <a
+                  href={explorerAddressUrl(match.chainId, match.contractAddress)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-mono text-xs text-primary hover:underline"
+                >
+                  {shortenAddress(match.contractAddress)}
+                </a>
+              </TableCell>
+              <TableCell className="font-mono text-xs text-muted-foreground">
+                {match.metadata?.mintPriceWei
+                  ? `${formatWeiToEth(String(match.metadata.mintPriceWei))} ETH`
+                  : "—"}
+              </TableCell>
+              <TableCell className="text-xs text-muted-foreground">{timeAgo(match.detectedAt)}</TableCell>
+              <TableCell>
+                <MatchStatusBadge status={match.status} />
+              </TableCell>
+              <TableCell className="text-right">
+                {match.status === "OBSERVED" && (
+                  <div className="flex items-center justify-end gap-2">
+                    <Button variant="ghost" size="sm" onClick={() => handleSkip(match)}>
+                      <Ban className="h-3.5 w-3.5" aria-hidden="true" /> Skip
+                    </Button>
+
+                    {match.rule?.autoExecute ? (
+                      <Badge variant="warning">Auto-executing…</Badge>
+                    ) : (
+                      <ArmSnipeDialog match={match} />
+                    )}
+                  </div>
+                )}
+                {match.status !== "OBSERVED" && match.skipReason && (
+                  <span className="text-xs text-muted-foreground">{match.skipReason}</span>
+                )}
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </>
   );
 }
 

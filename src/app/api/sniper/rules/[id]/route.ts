@@ -20,6 +20,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         ...(input.name !== undefined ? { name: input.name } : {}),
         ...(input.enabled !== undefined ? { enabled: input.enabled } : {}),
         ...(input.maxPriceWei !== undefined ? { maxPriceWei: input.maxPriceWei } : {}),
+        ...(input.autoExecute !== undefined ? { autoExecute: input.autoExecute } : {}),
         ...(input.maxGasPriceWei !== undefined ? { maxGasPriceWei: input.maxGasPriceWei } : {}),
         ...(input.quantityPerWallet !== undefined ? { quantityPerWallet: input.quantityPerWallet } : {}),
         ...(input.config !== undefined ? { config: input.config as unknown as Prisma.InputJsonValue } : {}),

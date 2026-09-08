@@ -87,7 +87,7 @@ export interface ActivityEventDTO {
 // ─────────────────────────────────────────────────────────────────────────
 
 export type SniperType = "NFT" | "TOKEN";
-export type AutomationMode = "SHADOW" | "MANUAL";
+export type AutomationMode = "SHADOW" | "MANUAL" | "AUTO";
 export type MatchStatus = "OBSERVED" | "ARMED" | "EXECUTED" | "SKIPPED" | "EXPIRED";
 
 export interface AutomationSettingsDTO {
@@ -106,16 +106,30 @@ export interface SniperRuleDTO {
   chainId: number;
   name: string;
   enabled: boolean;
+  autoExecute: boolean;
+
   maxPriceWei: string;
   maxGasPriceWei: string | null;
   quantityPerWallet: number;
+
   operatorWalletId: string;
+
   config: Record<string, unknown>;
+
   createdAt: string;
   updatedAt: string;
+
   operator?: WalletDTO;
-  receivers?: { id: string; walletId: string; wallet?: WalletDTO }[];
-  _count?: { matches: number };
+
+  receivers?: {
+    id: string;
+    walletId: string;
+    wallet?: WalletDTO;
+  }[];
+
+  _count?: {
+    matches: number;
+  };
 }
 
 export interface SniperMatchDTO {
@@ -129,7 +143,21 @@ export interface SniperMatchDTO {
   armedAt: string | null;
   executedRunId: string | null;
   skipReason: string | null;
-  metadata: Record<string, unknown> | null;
+
+  metadata: {
+    mintPriceWei?: string;
+    maxPerWallet?: number;
+    startTime?: number;
+    endTime?: number;
+
+    feeBps?: number;
+    restrictFeeRecipients?: boolean;
+
+    feeRecipient?: string | null;
+    feeRecipientSource?: string;
+    feeRecipientReason?: string | null;
+  } | null;
+
   rule?: SniperRuleDTO;
 }
 

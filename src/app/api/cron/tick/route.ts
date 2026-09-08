@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { executeCampaignOnServer } from "@/lib/server/executeCampaignRun";
+import { runAllCapChecks } from "@/lib/automation/caps";
 
 function authorize(req: NextRequest) {
   const secret = process.env.CRON_SECRET;
@@ -45,6 +46,21 @@ export async function POST(req: NextRequest) {
         maxPriorityFeePerGasWei: c.scheduleMaxPriorityFeePerGasWei,
       });
 
+      const capCheck = await runAllCapChecks(
+        userId,
+        BigInt(input.estimatedTotalCostWei ?? "0"),
+      );
+
+      if (!capCheck.allowed) {
+        return NextResponse.json(
+          {
+            error:
+              capCheck.reason ??
+              "Blocked by automation caps",
+          },
+          { status: 403 },
+        );
+      }
       await prisma.campaign.update({
         where: { id: c.id },
         data: { scheduleStatus: "FIRED" },

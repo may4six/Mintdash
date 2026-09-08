@@ -23,6 +23,7 @@ export function NftRuleDialog({ chainId, onCreated }: { chainId: number; onCreat
   const [operatorWalletId, setOperatorWalletId] = useState("");
   const [selectedReceiverIds, setSelectedReceiverIds] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
+  const [autoExecute, setAutoExecute] = useState(false);
 
   async function handleCreate() {
     setBusy(true);
@@ -36,6 +37,7 @@ export function NftRuleDialog({ chainId, onCreated }: { chainId: number; onCreat
         quantityPerWallet,
         operatorWalletId,
         receiverWalletIds: selectedReceiverIds,
+        autoExecute,
         config: {},
       });
       const res = await fetch("/api/sniper/rules", {
@@ -49,6 +51,7 @@ export function NftRuleDialog({ chainId, onCreated }: { chainId: number; onCreat
       setOpen(false);
       setName("");
       setSelectedReceiverIds([]);
+      setAutoExecute(false);
       onCreated();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to create rule");
@@ -127,6 +130,26 @@ export function NftRuleDialog({ chainId, onCreated }: { chainId: number; onCreat
             disabled={!name || !operatorWalletId || selectedReceiverIds.length === 0}
             onClick={handleCreate}
           >
+               <label className="flex cursor-pointer items-center gap-3 rounded-md border border-border p-3">
+                 <input
+                   type="checkbox"
+                   className="h-4 w-4 accent-primary"
+                   checked={autoExecute}
+                   onChange={(e) =>
+                     setAutoExecute(e.target.checked)
+                   }
+                />
+
+                <span className="flex-1">
+                  <span className="block text-sm font-medium">
+                    Auto-execute matched drops
+                  </span>
+
+                  <span className="block text-xs text-muted-foreground">
+                    Automatically preflight and mint when this rule matches.
+                  </span>
+                </span>
+               </label>
             Create rule
           </Button>
         </div>
