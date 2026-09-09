@@ -64,11 +64,24 @@ export function getChainMeta(chainId: number): ChainMeta {
   return meta;
 }
 
+/**
+ * Prefer Alchemy when a key is set AND the chain has a real Alchemy network
+ * slug. For chains like Robinhood (no Alchemy product), always use the
+ * chain's own default RPC so preflight does not point at a dead URL.
+ */
 export function getRpcUrl(chainId: number): string | undefined {
-  const apiKey = process.env.NEXT_PUBLIC_ALCHEMY_API_KEY;
-  if (!apiKey) return undefined;
   const meta = SUPPORTED_CHAINS.find((c) => c.id === chainId);
   if (!meta) return undefined;
+
+  const chainDefault = meta.chain.rpcUrls.default.http[0];
+  const apiKey = process.env.NEXT_PUBLIC_ALCHEMY_API_KEY;
+
+  // Networks that are not on Alchemy — never build a fake Alchemy URL.
+  const noAlchemy = new Set(["robinhood-mainnet", "robinhood-testnet"]);
+  if (!apiKey || noAlchemy.has(meta.alchemyNetwork)) {
+    return chainDefault;
+  }
+
   return `https://${meta.alchemyNetwork}.g.alchemy.com/v2/${apiKey}`;
 }
 

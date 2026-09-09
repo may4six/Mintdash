@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { parseEther, parseUnits, type Abi, type Address } from "viem";
+import { parseEther, parseUnits, formatEther, type Abi, type Address } from "viem";
 import { useAccount, useWriteContract, usePublicClient } from "wagmi";
 import { toast } from "sonner";
 import {
@@ -37,6 +37,11 @@ import {
 import { abiJsonSchema, createCampaignSchema } from "@/lib/validations";
 import { explorerTxUrl } from "@/lib/constants";
 import { shortenAddress } from "@/lib/utils";
+import {
+  SEADROP_COMBINED_MINT_ABI,
+  CANONICAL_SEADROP_ADDRESS,
+  isSeaDropMintFunction,
+} from "@/lib/sniper/seadropCombined";
 import type { MintPhase, MintExecutionItem, ItemStatus } from "@/types";
 
 const STEPS = ["Contract", "Function & price", "Receivers", "Preflight", "Execute"] as const;
@@ -83,6 +88,67 @@ export function CampaignWizard({ chainId }: { chainId: number }) {
     }
   }
 
+  /** Inject SeaDrop combined ABI + force contractAddress to canonical SeaDrop. */
+  function applySeaDropPreset() {
+    setContractAddress(CANONICAL_SEADROP_ADDRESS);
+    setAbiText(JSON.stringify(SEADROP_COMBINED_MINT_ABI, null, 2));
+    setSelectedFunctionName("mintPublic");
+    setPhase("PUBLIC");
+    setAbiError(null);
+    toast.success("SeaDrop preset loaded — contract is SeaDrop; put the NFT in nftContract.");
+  }
+
+  /** Read getPublicDrop + allowed fee recipient; fill static args + price. */
+  async function resolveSeaDropPublicDrop() {
+    const nft = (nftContractInput || staticArgValues.nftContract || "").trim();
+    if (!/^0x[0-9a-fA-F]{40}$/.test(nft)) {
+      toast.error("Enter a valid NFT contract address first.");
+      return;
+    }
+    setIsResolvingSeaDrop(true);
+    try {
+      const res = await fetch("/api/seadrop/resolve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chainId, nftContract: nft }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Resolve failed");
+
+      setContractAddress(data.seaDropAddress);
+      setStaticArgValues((prev) => ({
+        ...prev,
+        nftContract: nft,
+        feeRecipient: data.feeRecipient ?? prev.feeRecipient ?? "",
+        quantity: prev.quantity || "1",
+      }));
+
+      if (data.feeRecipient) {
+        toast.success(`feeRecipient set (${data.feeRecipientSource})`);
+      } else {
+        toast.error(data.feeRecipientReason ?? "Could not resolve feeRecipient");
+      }
+
+      if (data.publicDrop?.mintPriceWei) {
+        try {
+          setPriceEth(formatEther(BigInt(data.publicDrop.mintPriceWei)));
+        } catch {
+          /* keep manual price */
+        }
+      }
+
+      // Ensure SeaDrop ABI is present
+      if (!selectedFunctionName || !isSeaDropMintFunction(selectedFunctionName)) {
+        setAbiText(JSON.stringify(SEADROP_COMBINED_MINT_ABI, null, 2));
+        setSelectedFunctionName("mintPublic");
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "SeaDrop resolve failed");
+    } finally {
+      setIsResolvingSeaDrop(false);
+    }
+  }
+
   // Step 2 — function, phase, price, static args
   const functionCandidates = useMemo(() => (parsedAbi ? getLikelyMintFunctions(parsedAbi) : []), [parsedAbi]);
   const [selectedFunctionName, setSelectedFunctionName] = useState<string | null>(null);
@@ -98,6 +164,9 @@ export function CampaignWizard({ chainId }: { chainId: number }) {
   const [staticArgValues, setStaticArgValues] = useState<Record<string, string>>({});
   const [phase, setPhase] = useState<MintPhase>("PUBLIC");
   const [priceEth, setPriceEth] = useState("0");
+  /** NFT collection address (SeaDrop arg). Separate from contractAddress which must be SeaDrop. */
+  const [nftContractInput, setNftContractInput] = useState("");
+  const [isResolvingSeaDrop, setIsResolvingSeaDrop] = useState(false);
 
   // Step 3 — operator + receivers
   const { data: operatorWallets } = useOperatorWallets(chainId);
@@ -211,14 +280,24 @@ export function CampaignWizard({ chainId }: { chainId: number }) {
     if (!parsedAbi || !selectedFunctionName) return;
     setIsSaving(true);
     try {
+      // SeaDrop: never save the NFT as contractAddress
+      let finalContract = contractAddress;
+      let finalStatic = { ...staticArgs };
+      if (isSeaDropMintFunction(selectedFunctionName)) {
+        finalContract = CANONICAL_SEADROP_ADDRESS;
+        if (nftContractInput && !finalStatic.nftContract) {
+          finalStatic = { ...finalStatic, nftContract: nftContractInput };
+        }
+      }
+
       const payload = {
         name,
         chainId,
-        contractAddress,
+        contractAddress: finalContract,
         abi: parsedAbi as unknown as Record<string, unknown>[],
         mintFunctionName: selectedFunctionName,
         recipientParam,
-        staticArgValues: staticArgs,
+        staticArgValues: finalStatic,
         phase,
         priceWeiPerMint: safeParseEther(priceEth).toString(),
         maxPerWallet: null,
@@ -333,7 +412,10 @@ export function CampaignWizard({ chainId }: { chainId: number }) {
         <Card>
           <CardHeader>
             <CardTitle>Contract</CardTitle>
-            <CardDescription>Point at the NFT contract you want to mint from.</CardDescription>
+            <CardDescription>
+              For normal NFTs, paste the collection address. For OpenSea SeaDrop drops, use the SeaDrop preset —
+              the call goes to SeaDrop; the NFT is only an argument.
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             <FormField label="Campaign name">
@@ -343,6 +425,14 @@ export function CampaignWizard({ chainId }: { chainId: number }) {
                 onChange={(e) => setName(e.target.value)}
               />
             </FormField>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="secondary" onClick={applySeaDropPreset}>
+                Use SeaDrop preset
+              </Button>
+              <span className="self-center text-[11px] text-muted-foreground">
+                Loads mintPublic + mintAllowList ABI and sets contract to canonical SeaDrop.
+              </span>
+            </div>
             <FormField label="Contract address">
               <div className="flex gap-2">
                 <Input placeholder="0x..." value={contractAddress} onChange={(e) => setContractAddress(e.target.value)} />
@@ -370,7 +460,15 @@ export function CampaignWizard({ chainId }: { chainId: number }) {
           </CardHeader>
           <CardContent className="space-y-3">
             <FormField label="Mint function">
-              <Select value={selectedFunctionName ?? ""} onChange={(e) => setSelectedFunctionName(e.target.value || null)}>
+              <Select
+                value={selectedFunctionName ?? ""}
+                onChange={(e) => {
+                  const name = e.target.value || null;
+                  setSelectedFunctionName(name);
+                  if (name === "mintAllowList") setPhase("WHITELIST");
+                  if (name === "mintPublic") setPhase("PUBLIC");
+                }}
+              >
                 <option value="">Select a function…</option>
                 {functionCandidates.map((fn) => (
                   <option key={fn.name} value={fn.name}>
@@ -379,6 +477,41 @@ export function CampaignWizard({ chainId }: { chainId: number }) {
                 ))}
               </Select>
             </FormField>
+
+            {selectedFunctionName && isSeaDropMintFunction(selectedFunctionName) && (
+              <div className="space-y-2 rounded-md border border-border bg-muted/30 p-3">
+                <p className="text-xs font-medium text-foreground">SeaDrop helpers</p>
+                <p className="text-[11px] text-muted-foreground">
+                  contractAddress must be SeaDrop ({CANONICAL_SEADROP_ADDRESS.slice(0, 10)}…). The NFT
+                  collection goes only in <code className="font-mono">nftContract</code>.
+                </p>
+                <FormField label="NFT contract (collection)">
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="0x… NFT collection"
+                      value={nftContractInput || staticArgValues.nftContract || ""}
+                      onChange={(e) => {
+                        setNftContractInput(e.target.value);
+                        setStaticArgValues((prev) => ({ ...prev, nftContract: e.target.value }));
+                      }}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      isLoading={isResolvingSeaDrop}
+                      onClick={() => void resolveSeaDropPublicDrop()}
+                    >
+                      Resolve fee + price
+                    </Button>
+                  </div>
+                </FormField>
+                {contractAddress.toLowerCase() !== CANONICAL_SEADROP_ADDRESS.toLowerCase() && (
+                  <p className="text-[11px] text-warning">
+                    Warning: contract address is not the canonical SeaDrop. Click “Use SeaDrop preset” on the Contract step or paste {CANONICAL_SEADROP_ADDRESS}.
+                  </p>
+                )}
+              </div>
+            )}
 
             {selectedFn && (
               <div
