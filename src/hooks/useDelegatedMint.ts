@@ -5,6 +5,11 @@ import { usePublicClient } from "wagmi";
 import type { Abi, Address, WalletClient } from "viem";
 import { findAbiFunction, buildCallArgs, computeMintValue } from "@/lib/contracts/abi";
 import { extractRevertReason } from "@/lib/contracts/errors";
+import {
+  isAllowListCampaign,
+  buildAllowListArgsFromStatic,
+  allowListMintValue,
+} from "@/lib/sniper/seadropAllowList";
 import type { MintExecutionItem } from "@/types";
 
 export interface DelegatedMintParams {
@@ -12,8 +17,7 @@ export interface DelegatedMintParams {
   contractAddress: Address;
   abi: Abi;
   functionName: string;
-  /** Non-null — this hook is for the operator-pays-for-everyone path only.
-   * Callers must route msg.sender-only functions to the receiver self-sign flow instead. */
+  /** Non-null — operator-pays path only. */
   recipientParam: string;
   staticArgs: Record<string, unknown>;
   priceWeiPerMint: bigint;
@@ -29,7 +33,10 @@ export interface ReceiverTarget {
 interface UseDelegatedMintResult {
   items: MintExecutionItem[];
   isRunning: boolean;
-  execute: (getWalletClient: () => Promise<WalletClient>, receivers: ReceiverTarget[]) => Promise<void>;
+  execute: (
+    getWalletClient: () => Promise<WalletClient>,
+    receivers: ReceiverTarget[]
+  ) => Promise<void>;
   retryFailed: (getWalletClient: () => Promise<WalletClient>) => Promise<void>;
   reset: () => void;
 }
@@ -40,10 +47,16 @@ export function useDelegatedMint(params: DelegatedMintParams): UseDelegatedMintR
   const [isRunning, setIsRunning] = useState(false);
   const targetsRef = useRef<Map<string, ReceiverTarget>>(new Map());
 
-  const fn = useMemo(() => findAbiFunction(params.abi, params.functionName), [params.abi, params.functionName]);
+  const fn = useMemo(
+    () => findAbiFunction(params.abi, params.functionName),
+    [params.abi, params.functionName]
+  );
+  const allowList = isAllowListCampaign(params.functionName);
 
   const updateItem = useCallback((walletId: string, patch: Partial<MintExecutionItem>) => {
-    setItems((prev) => prev.map((item) => (item.walletId === walletId ? { ...item, ...patch } : item)));
+    setItems((prev) =>
+      prev.map((item) => (item.walletId === walletId ? { ...item, ...patch } : item))
+    );
   }, []);
 
   const runBatch = useCallback(
@@ -71,9 +84,22 @@ export function useDelegatedMint(params: DelegatedMintParams): UseDelegatedMintR
           nextNonce += 1;
           const attempt = attemptOf(receiver.walletId);
 
-          updateItem(receiver.walletId, { status: "PENDING", errorMessage: undefined, attempt });
+          updateItem(receiver.walletId, {
+            status: "PENDING",
+            errorMessage: undefined,
+            attempt,
+          });
           try {
-            const args = buildCallArgs(fn, params.recipientParam, receiver.address, params.staticArgs);
+            const args = allowList
+              ? buildAllowListArgsFromStatic(params.staticArgs, receiver.address)
+              : buildCallArgs(fn, params.recipientParam, receiver.address, params.staticArgs);
+
+            const value = allowList
+              ? allowListMintValue(params.staticArgs, params.priceWeiPerMint)
+              : fn.stateMutability === "payable"
+                ? computeMintValue(fn, params.staticArgs, params.priceWeiPerMint)
+                : undefined;
+
             const hash = await walletClient.writeContract({
               address: params.contractAddress,
               abi: params.abi,
@@ -81,7 +107,7 @@ export function useDelegatedMint(params: DelegatedMintParams): UseDelegatedMintR
               args,
               account: operatorAccount,
               chain: operatorChain,
-              value: fn.stateMutability === "payable" ? computeMintValue(fn, params.staticArgs, params.priceWeiPerMint) : undefined,
+              value,
               nonce,
               maxFeePerGas: params.maxFeePerGasWei,
               maxPriorityFeePerGas: params.maxPriorityFeePerGasWei,
@@ -111,7 +137,7 @@ export function useDelegatedMint(params: DelegatedMintParams): UseDelegatedMintR
         })
       );
     },
-    [publicClient, fn, params, updateItem]
+    [publicClient, fn, params, updateItem, allowList]
   );
 
   const execute = useCallback(
@@ -121,7 +147,7 @@ export function useDelegatedMint(params: DelegatedMintParams): UseDelegatedMintR
         receivers.map((r) => ({
           walletId: r.walletId,
           address: r.address,
-          status: "PENDING",
+          status: "PENDING" as const,
           attempt: 1,
         }))
       );

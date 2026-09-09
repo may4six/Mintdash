@@ -5,6 +5,11 @@ import { findAbiFunction, buildCallArgs, computeMintValue } from "@/lib/contract
 import { extractRevertReason } from "@/lib/contracts/errors";
 import { ACTIVITY_EVENT_TYPES } from "@/lib/constants";
 import { runAllCapChecks } from "@/lib/automation/caps";
+import {
+  isAllowListCampaign,
+  buildAllowListArgsFromStatic,
+  allowListMintValue,
+} from "@/lib/sniper/seadropAllowList";
 
 export async function executeCampaignOnServer(opts: {
   campaignId: string;
@@ -46,8 +51,11 @@ export async function executeCampaignOnServer(opts: {
 
   const staticArgs = (campaign.staticArgValues ?? {}) as Record<string, unknown>;
   const priceWei = BigInt(campaign.priceWeiPerMint || "0");
-  const estimated =
-    priceWei * BigInt(Math.max(campaign.receivers.length, 1));
+  const allowList = isAllowListCampaign(campaign.mintFunctionName);
+
+  const estimated = allowList
+    ? allowListMintValue(staticArgs, priceWei) * BigInt(Math.max(campaign.receivers.length, 1))
+    : priceWei * BigInt(Math.max(campaign.receivers.length, 1));
 
   const caps = await runAllCapChecks(opts.userId, estimated);
   if (!caps.allowed) throw new Error(caps.reason ?? "Blocked by automation caps");
@@ -80,12 +88,18 @@ export async function executeCampaignOnServer(opts: {
   for (const item of run.items) {
     const nonce = nextNonce++;
     try {
-      const args = buildCallArgs(
-        fn,
-        campaign.recipientParam,
-        item.receiver.address as Address,
-        staticArgs
-      );
+      const receiver = item.receiver.address as Address;
+
+      const args = allowList
+        ? buildAllowListArgsFromStatic(staticArgs, receiver)
+        : buildCallArgs(fn, campaign.recipientParam, receiver, staticArgs);
+
+      const value = allowList
+        ? allowListMintValue(staticArgs, priceWei)
+        : fn.stateMutability === "payable"
+          ? computeMintValue(fn, staticArgs, priceWei)
+          : undefined;
+
       const hash = await walletClient.writeContract({
         address: campaign.contractAddress as Address,
         abi,
@@ -93,14 +107,9 @@ export async function executeCampaignOnServer(opts: {
         args,
         account,
         chain: walletClient.chain!,
-        value:
-          fn.stateMutability === "payable"
-            ? computeMintValue(fn, staticArgs, priceWei)
-            : undefined,
+        value,
         nonce,
-        ...(opts.maxFeePerGasWei
-          ? { maxFeePerGas: BigInt(opts.maxFeePerGasWei) }
-          : {}),
+        ...(opts.maxFeePerGasWei ? { maxFeePerGas: BigInt(opts.maxFeePerGasWei) } : {}),
         ...(opts.maxPriorityFeePerGasWei
           ? { maxPriorityFeePerGas: BigInt(opts.maxPriorityFeePerGasWei) }
           : {}),
@@ -121,9 +130,7 @@ export async function executeCampaignOnServer(opts: {
           gasUsedWei: receipt.gasUsed?.toString(),
           effectiveGasPriceWei: receipt.effectiveGasPrice?.toString(),
           errorMessage:
-            receipt.status === "success"
-              ? null
-              : "Transaction mined but reverted",
+            receipt.status === "success" ? null : "Transaction mined but reverted",
         },
       });
     } catch (e) {
