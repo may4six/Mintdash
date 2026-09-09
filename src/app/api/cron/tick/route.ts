@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { executeCampaignOnServer } from "@/lib/server/executeCampaignRun";
-import { runAllCapChecks } from "@/lib/automation/caps";
+import { createCampaignFromSniperMatch } from "@/lib/server/createCampaignFromMatch";
 
 function authorize(req: NextRequest) {
   const secret = process.env.CRON_SECRET;
@@ -16,6 +16,9 @@ export async function POST(req: NextRequest) {
   }
 
   const now = new Date();
+  const results: unknown[] = [];
+
+  // ── Scheduled campaigns ──────────────────────────────────────────────
   const due = await prisma.campaign.findMany({
     where: {
       autoExecute: true,
@@ -25,8 +28,6 @@ export async function POST(req: NextRequest) {
     take: 20,
   });
 
-  const results: unknown[] = [];
-
   for (const c of due) {
     try {
       if (!c.scheduleOperatorWalletId) {
@@ -34,10 +35,11 @@ export async function POST(req: NextRequest) {
           where: { id: c.id },
           data: { scheduleStatus: "FAILED" },
         });
-        results.push({ campaignId: c.id, error: "No scheduleOperatorWalletId" });
+        results.push({ type: "schedule", campaignId: c.id, error: "No scheduleOperatorWalletId" });
         continue;
       }
 
+      // Caps are enforced inside executeCampaignOnServer
       const out = await executeCampaignOnServer({
         campaignId: c.id,
         userId: c.userId,
@@ -46,65 +48,114 @@ export async function POST(req: NextRequest) {
         maxPriorityFeePerGasWei: c.scheduleMaxPriorityFeePerGasWei,
       });
 
-      const capCheck = await runAllCapChecks(
-        userId,
-        BigInt(input.estimatedTotalCostWei ?? "0"),
-      );
-
-      if (!capCheck.allowed) {
-        return NextResponse.json(
-          {
-            error:
-              capCheck.reason ??
-              "Blocked by automation caps",
-          },
-          { status: 403 },
-        );
-      }
       await prisma.campaign.update({
         where: { id: c.id },
         data: { scheduleStatus: "FIRED" },
       });
-      results.push({ campaignId: c.id, ...out });
+      results.push({ type: "schedule", campaignId: c.id, ...out });
     } catch (e) {
       await prisma.campaign.update({
         where: { id: c.id },
         data: { scheduleStatus: "FAILED" },
       });
       results.push({
+        type: "schedule",
         campaignId: c.id,
         error: e instanceof Error ? e.message : "failed",
       });
     }
   }
 
-  // Auto-snipe: matches already OBSERVED whose rule has autoExecute
+  // ── Auto-snipe (server / laptop closed) ──────────────────────────────
   const autoMatches = await prisma.sniperMatch.findMany({
     where: {
       status: "OBSERVED",
       rule: { autoExecute: true, enabled: true },
     },
-    include: { rule: { include: { receivers: true } } },
+    include: {
+      rule: {
+        include: {
+          receivers: true,
+        },
+      },
+    },
     take: 10,
   });
 
   for (const m of autoMatches) {
-    const settings = await prisma.automationSettings.findUnique({
-      where: { userId: m.userId },
-    });
-    if (!settings?.automationEnabled) continue;
+    try {
+      const settings = await prisma.automationSettings.findUnique({
+        where: { userId: m.userId },
+      });
+      if (!settings?.automationEnabled) continue;
 
-    // Minimal path: mark ARMED and leave campaign creation to your existing
-    // "snipe → create campaign" helper if you have one. Prefer calling that
-    // shared function here so behavior matches the UI Snipe button.
-    await prisma.sniperMatch.update({
-      where: { id: m.id },
-      data: { status: "ARMED", armedAt: new Date() },
-    });
-    // TODO: call the same server helper the UI uses after "Snipe" to create
-    // campaign + executeCampaignOnServer. Wire that next once you paste
-    // the Snipe handler file path.
-    results.push({ matchId: m.id, note: "armed-for-auto; wire execute helper" });
+      const meta = m.metadata as { feeRecipient?: string } | null;
+      if (
+        !meta?.feeRecipient ||
+        meta.feeRecipient === "0x0000000000000000000000000000000000000000"
+      ) {
+        await prisma.sniperMatch.update({
+          where: { id: m.id },
+          data: {
+            status: "SKIPPED",
+            skipReason: "No resolved feeRecipient in match metadata",
+          },
+        });
+        results.push({ type: "snipe", matchId: m.id, error: "missing feeRecipient" });
+        continue;
+      }
+
+      if (!m.rule.receivers.length) {
+        await prisma.sniperMatch.update({
+          where: { id: m.id },
+          data: {
+            status: "SKIPPED",
+            skipReason: "Rule has no receiver wallets",
+          },
+        });
+        results.push({ type: "snipe", matchId: m.id, error: "no receivers" });
+        continue;
+      }
+
+      await prisma.sniperMatch.update({
+        where: { id: m.id },
+        data: { status: "ARMED", armedAt: new Date() },
+      });
+
+      const { campaign, operatorWalletId } = await createCampaignFromSniperMatch(m);
+
+      const out = await executeCampaignOnServer({
+        campaignId: campaign.id,
+        userId: m.userId,
+        operatorWalletId,
+        maxFeePerGasWei: m.rule.maxGasPriceWei ?? undefined,
+      });
+
+      await prisma.sniperMatch.update({
+        where: { id: m.id },
+        data: {
+          status: "EXECUTED",
+          executedRunId: out.runId,
+        },
+      });
+
+      results.push({
+        type: "snipe",
+        matchId: m.id,
+        campaignId: campaign.id,
+        ...out,
+      });
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "auto-snipe failed";
+      await prisma.sniperMatch.update({
+        where: { id: m.id },
+        data: {
+          status: "SKIPPED",
+          skipReason: message.slice(0, 280),
+        },
+      });
+      results.push({ type: "snipe", matchId: m.id, error: message });
+    }
   }
 
   return NextResponse.json({ ok: true, at: now.toISOString(), results });
