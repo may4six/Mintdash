@@ -35,11 +35,15 @@ export async function POST(req: NextRequest) {
           where: { id: c.id },
           data: { scheduleStatus: "FAILED" },
         });
-        results.push({ type: "schedule", campaignId: c.id, error: "No scheduleOperatorWalletId" });
+        results.push({
+          type: "schedule",
+          campaignId: c.id,
+          error: "No scheduleOperatorWalletId",
+        });
         continue;
       }
 
-      // Caps are enforced inside executeCampaignOnServer
+      // Caps enforced inside executeCampaignOnServer
       const out = await executeCampaignOnServer({
         campaignId: c.id,
         userId: c.userId,
@@ -66,7 +70,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // ── Auto-snipe (server / laptop closed) ──────────────────────────────
+  // ── Auto-snipe (Railway / laptop closed) ─────────────────────────────
   const autoMatches = await prisma.sniperMatch.findMany({
     where: {
       status: "OBSERVED",
