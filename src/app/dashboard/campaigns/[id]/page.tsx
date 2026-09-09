@@ -45,13 +45,19 @@ export default async function CampaignDetailPage({ params }: { params: Promise<{
         <Badge variant={campaign.phase === "WHITELIST" ? "warning" : "default"}>{campaign.phase}</Badge>
         <Badge variant="muted">{formatWeiToEth(campaign.priceWeiPerMint)} ETH / mint</Badge>
         <Badge variant="muted">{campaign.receivers.length} receivers attached</Badge>
-        {campaign.recipientParam ? (
-          <Badge variant="success">Operator can mint directly</Badge>
+        {campaign.mintFunctionName === "mintPublic" ||
+        campaign.mintFunctionName === "mintAllowList" ? (
+        <Badge variant="success">Self-mint (server keys)</Badge>
+        ) : campaign.recipientParam ? (
+        <Badge variant="success">Operator can mint directly</Badge>
         ) : (
-          <Badge variant="warning">Requires receiver signature</Badge>
+        <Badge variant="warning">Requires receiver signature</Badge>
         )}
       </div>
 
+      <ScheduleArmPanel campaign={campaignDto} />
+
+      {/* Optional: keep old browser operator path for non-SeaDrop contracts */}
       <RunCampaignPanel campaign={campaignDto} />
 
       <Card>
