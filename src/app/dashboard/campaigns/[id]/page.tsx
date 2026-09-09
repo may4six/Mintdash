@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { EmptyState } from "@/components/ui/misc";
 import { RunCampaignPanel } from "@/components/campaigns/run-campaign-panel";
+import { ScheduleArmPanel } from "@/components/campaigns/schedule-arm-panel";
 import { RunStatusBadge } from "@/components/dashboard/run-status-badge";
 import { shortenAddress, formatWeiToEth, timeAgo } from "@/lib/utils";
 import type { CampaignDTO } from "@/types";
