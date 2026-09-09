@@ -1,14 +1,9 @@
 import {
   mainnet,
-  sepolia,
   base,
-  baseSepolia,
   arbitrum,
-  arbitrumSepolia,
   optimism,
-  optimismSepolia,
   polygon,
-  polygonAmoy,
 } from "wagmi/chains";
 import { defineChain, type Chain } from "viem";
 
@@ -18,15 +13,6 @@ export const robinhood = defineChain({
   nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
   rpcUrls: { default: { http: ["https://rpc.mainnet.chain.robinhood.com"] } },
   blockExplorers: { default: { name: "Blockscout", url: "https://robinhoodchain.blockscout.com" } },
-});
-
-export const robinhoodTestnet = defineChain({
-  id: 46630,
-  name: "Robinhood Chain Testnet",
-  nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-  rpcUrls: { default: { http: ["https://rpc.testnet.chain.robinhood.com"] } },
-  blockExplorers: { default: { name: "Blockscout", url: "https://explorer.testnet.chain.robinhood.com" } },
-  testnet: true,
 });
 
 export interface ChainMeta {
@@ -46,15 +32,9 @@ export const SUPPORTED_CHAINS: ChainMeta[] = [
   { id: optimism.id, chain: optimism, label: "Optimism", shortLabel: "Optimism", isTestnet: false, explorerBase: "https://optimistic.etherscan.io", alchemyNetwork: "opt-mainnet" },
   { id: polygon.id, chain: polygon, label: "Polygon", shortLabel: "Polygon", isTestnet: false, explorerBase: "https://polygonscan.com", alchemyNetwork: "polygon-mainnet" },
   { id: robinhood.id, chain: robinhood, label: "Robinhood Chain", shortLabel: "Robinhood", isTestnet: false, explorerBase: "https://robinhoodchain.blockscout.com", alchemyNetwork: "robinhood-mainnet" },
-  { id: sepolia.id, chain: sepolia, label: "Sepolia Testnet", shortLabel: "Sepolia", isTestnet: true, explorerBase: "https://sepolia.etherscan.io", alchemyNetwork: "eth-sepolia" },
-  { id: baseSepolia.id, chain: baseSepolia, label: "Base Sepolia", shortLabel: "Base Sepolia", isTestnet: true, explorerBase: "https://sepolia.basescan.org", alchemyNetwork: "base-sepolia" },
-  { id: arbitrumSepolia.id, chain: arbitrumSepolia, label: "Arbitrum Sepolia", shortLabel: "Arb Sepolia", isTestnet: true, explorerBase: "https://sepolia.arbiscan.io", alchemyNetwork: "arb-sepolia" },
-  { id: optimismSepolia.id, chain: optimismSepolia, label: "Optimism Sepolia", shortLabel: "OP Sepolia", isTestnet: true, explorerBase: "https://sepolia-optimism.etherscan.io", alchemyNetwork: "opt-sepolia" },
-  { id: polygonAmoy.id, chain: polygonAmoy, label: "Polygon Amoy", shortLabel: "Amoy", isTestnet: true, explorerBase: "https://amoy.polygonscan.com", alchemyNetwork: "polygon-amoy" },
-  { id: robinhoodTestnet.id, chain: robinhoodTestnet, label: "Robinhood Testnet", shortLabel: "RH Testnet", isTestnet: true, explorerBase: "https://explorer.testnet.chain.robinhood.com", alchemyNetwork: "robinhood-testnet" },
 ];
 
-export const DEFAULT_CHAIN_ID = sepolia.id;
+export const DEFAULT_CHAIN_ID = robinhood.id;
 
 export function getChainMeta(chainId: number): ChainMeta {
   const meta = SUPPORTED_CHAINS.find((c) => c.id === chainId);
@@ -77,7 +57,7 @@ export function getRpcUrl(chainId: number): string | undefined {
   const apiKey = process.env.NEXT_PUBLIC_ALCHEMY_API_KEY;
 
   // Networks that are not on Alchemy — never build a fake Alchemy URL.
-  const noAlchemy = new Set(["robinhood-mainnet", "robinhood-testnet"]);
+  const noAlchemy = new Set(["robinhood-mainnet"]);
   if (!apiKey || noAlchemy.has(meta.alchemyNetwork)) {
     return chainDefault;
   }
