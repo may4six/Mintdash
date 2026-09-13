@@ -1,11 +1,18 @@
 "use client";
 
 import { useState } from "react";
-import { useAccount, useConnect, useDisconnect, useChainId, useSwitchChain } from "wagmi";
+import {
+  useAccount,
+  useConnect,
+  useDisconnect,
+  useChainId,
+  useSwitchChain,
+} from "wagmi";
 import { useSeaDropFire } from "@/hooks/useSeaDropFire";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { robinhood } from "@/lib/constants";
+import { SchedulePanel } from "./schedule-panel";
 import type { Address } from "viem";
 
 export default function SeaDropFirePage() {
@@ -44,12 +51,12 @@ export default function SeaDropFirePage() {
           <CardTitle>SeaDrop High-Speed Fire</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Wallet status */}
           <div className="rounded-md border p-3 text-sm">
             {!isConnected ? (
               <div className="space-y-2">
                 <p className="text-muted-foreground">
-                  Connect the Operator wallet that will pay gas.
+                  Connect the Operator wallet that will pay gas (manual fire
+                  only).
                 </p>
                 <div className="flex flex-wrap gap-2">
                   {connectors.map((c) => (
@@ -87,7 +94,11 @@ export default function SeaDropFirePage() {
                       Switch to Robinhood
                     </Button>
                   )}
-                  <Button size="sm" variant="ghost" onClick={() => disconnect()}>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => disconnect()}
+                  >
                     Disconnect
                   </Button>
                 </div>
@@ -186,6 +197,9 @@ export default function SeaDropFirePage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Unattended path — OPERATOR_PRIVATE_KEY + cron */}
+      <SchedulePanel />
     </div>
   );
 }
