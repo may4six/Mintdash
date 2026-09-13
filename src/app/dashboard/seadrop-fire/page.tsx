@@ -1,9 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import { useAccount, useConnect, useDisconnect, useChainId, useSwitchChain } from "wagmi";
 import { useSeaDropFire } from "@/hooks/useSeaDropFire";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { robinhood } from "@/lib/constants";
 import type { Address } from "viem";
 
 export default function SeaDropFirePage() {
@@ -13,9 +15,18 @@ export default function SeaDropFirePage() {
   );
   const [quantity, setQuantity] = useState(1);
 
+  const { address, isConnected } = useAccount();
+  const { connect, connectors, isPending: isConnecting } = useConnect();
+  const { disconnect } = useDisconnect();
+  const chainId = useChainId();
+  const { switchChain } = useSwitchChain();
+
   const { fire, cancel, status, attempt, lastError, result } = useSeaDropFire();
 
+  const isWrongChain = isConnected && chainId !== robinhood.id;
+
   const handleFire = (wait: boolean) => {
+    if (!isConnected) return;
     fire({
       slug,
       minter: minter as Address,
@@ -33,6 +44,57 @@ export default function SeaDropFirePage() {
           <CardTitle>SeaDrop High-Speed Fire</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* Wallet status */}
+          <div className="rounded-md border p-3 text-sm">
+            {!isConnected ? (
+              <div className="space-y-2">
+                <p className="text-muted-foreground">
+                  Connect the Operator wallet that will pay gas.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {connectors.map((c) => (
+                    <Button
+                      key={c.uid}
+                      size="sm"
+                      disabled={isConnecting}
+                      onClick={() => connect({ connector: c })}
+                    >
+                      {c.name}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <p className="font-medium">Connected</p>
+                  <p className="font-mono text-xs text-muted-foreground">
+                    {address}
+                  </p>
+                  {isWrongChain && (
+                    <p className="mt-1 text-xs text-yellow-600">
+                      Wrong network — switch to Robinhood Chain
+                    </p>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  {isWrongChain && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => switchChain({ chainId: robinhood.id })}
+                    >
+                      Switch to Robinhood
+                    </Button>
+                  )}
+                  <Button size="sm" variant="ghost" onClick={() => disconnect()}>
+                    Disconnect
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+
           <div>
             <label className="text-sm font-medium">Collection slug</label>
             <input
@@ -65,10 +127,15 @@ export default function SeaDropFirePage() {
             />
           </div>
 
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-3">
             <Button
               onClick={() => handleFire(true)}
-              disabled={status === "polling" || status === "sending"}
+              disabled={
+                !isConnected ||
+                isWrongChain ||
+                status === "polling" ||
+                status === "sending"
+              }
             >
               {status === "polling"
                 ? `Polling… (attempt ${attempt})`
@@ -78,7 +145,12 @@ export default function SeaDropFirePage() {
             <Button
               variant="outline"
               onClick={() => handleFire(false)}
-              disabled={status === "polling" || status === "sending"}
+              disabled={
+                !isConnected ||
+                isWrongChain ||
+                status === "polling" ||
+                status === "sending"
+              }
             >
               Fire Now (no wait)
             </Button>
@@ -91,8 +163,10 @@ export default function SeaDropFirePage() {
           </div>
 
           {status === "success" && result && (
-            <div className="rounded bg-green-50 p-3 text-sm">
-              <p className="font-medium text-green-800">Mint submitted!</p>
+            <div className="rounded bg-green-50 p-3 text-sm dark:bg-green-950">
+              <p className="font-medium text-green-800 dark:text-green-200">
+                Mint submitted!
+              </p>
               <p className="mt-1 break-all font-mono text-xs">
                 Tx: {result.txHash}
               </p>
@@ -100,13 +174,13 @@ export default function SeaDropFirePage() {
           )}
 
           {status === "error" && lastError && (
-            <div className="rounded bg-red-50 p-3 text-sm text-red-800">
+            <div className="rounded bg-red-50 p-3 text-sm text-red-800 dark:bg-red-950 dark:text-red-200">
               {lastError}
             </div>
           )}
 
           {status === "polling" && lastError && (
-            <div className="rounded bg-yellow-50 p-3 text-xs text-yellow-800">
+            <div className="rounded bg-yellow-50 p-3 text-xs text-yellow-800 dark:bg-yellow-950 dark:text-yellow-200">
               Last attempt: {lastError}
             </div>
           )}
