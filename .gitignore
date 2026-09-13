@@ -29,3 +29,6 @@ next-env.d.ts.bak
 .vscode/*
 !.vscode/extensions.json
 .idea
+
+# clerk configuration (can include secrets)
+/.clerk/
