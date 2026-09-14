@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { robinhood } from "@/lib/constants";
 import { SchedulePanel } from "./schedule-panel";
+import { JobsPanel } from "./jobs-panel";
 import type { Address } from "viem";
 
 export default function SeaDropFirePage() {
@@ -200,6 +201,7 @@ export default function SeaDropFirePage() {
 
       {/* Unattended path — OPERATOR_PRIVATE_KEY + cron */}
       <SchedulePanel />
+      <JobsPanel />
     </div>
   );
 }

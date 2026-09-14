@@ -12,6 +12,9 @@ const BodySchema = z.object({
   prePollSeconds: z.number().int().min(10).max(300).default(45),
   chainId: z.number().int().default(robinhood.id),
   name: z.string().optional(),
+  /** Wei as decimal string, e.g. "500000000" = 0.5 gwei */
+  maxFeePerGasWei: z.string().regex(/^\d+$/).optional().nullable(),
+  maxPriorityFeePerGasWei: z.string().regex(/^\d+$/).optional().nullable(),
 });
 
 export async function POST(req: NextRequest) {
@@ -48,6 +51,8 @@ export async function POST(req: NextRequest) {
         autoExecute: true,
         scheduleStatus: "ARMED",
         scheduledAt,
+        scheduleMaxFeePerGasWei: body.maxFeePerGasWei ?? null,
+        scheduleMaxPriorityFeePerGasWei: body.maxPriorityFeePerGasWei ?? null,
       },
     });
 
@@ -57,6 +62,8 @@ export async function POST(req: NextRequest) {
       slug: body.slug,
       minter: body.minter,
       prePollSeconds: body.prePollSeconds,
+      maxFeePerGasWei: body.maxFeePerGasWei ?? null,
+      maxPriorityFeePerGasWei: body.maxPriorityFeePerGasWei ?? null,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
