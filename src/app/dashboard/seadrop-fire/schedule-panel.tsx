@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { parseGwei } from "viem";
 
 export function SchedulePanel() {
   const [slug, setSlug] = useState("exit-founders");
@@ -11,6 +12,8 @@ export function SchedulePanel() {
   const [quantity, setQuantity] = useState(1);
   const [scheduledAt, setScheduledAt] = useState("");
   const [prePollSeconds, setPrePollSeconds] = useState(45);
+  const [maxFeeGwei, setMaxFeeGwei] = useState("5");
+  const [maxPriorityGwei, setMaxPriorityGwei] = useState("2");
   const [status, setStatus] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -19,6 +22,17 @@ export function SchedulePanel() {
     setStatus(null);
     try {
       const iso = new Date(scheduledAt).toISOString();
+
+      let maxFeePerGasWei: string | null = null;
+      let maxPriorityFeePerGasWei: string | null = null;
+
+      if (maxFeeGwei.trim()) {
+        maxFeePerGasWei = parseGwei(maxFeeGwei.trim()).toString();
+      }
+      if (maxPriorityGwei.trim()) {
+        maxPriorityFeePerGasWei = parseGwei(maxPriorityGwei.trim()).toString();
+      }
+
       const res = await fetch("/api/seadrop/schedule", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -28,12 +42,14 @@ export function SchedulePanel() {
           quantity,
           scheduledAt: iso,
           prePollSeconds,
+          maxFeePerGasWei,
+          maxPriorityFeePerGasWei,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to arm");
       setStatus(
-        `Armed. Job ${data.id}. Polling starts ${prePollSeconds}s before open.`,
+        `Armed. Job ${data.id}. Polling ${prePollSeconds}s early. maxFee=${maxFeeGwei || "auto"} gwei, priority=${maxPriorityGwei || "auto"} gwei.`,
       );
     } catch (err) {
       setStatus(err instanceof Error ? err.message : String(err));
@@ -46,8 +62,8 @@ export function SchedulePanel() {
     <div className="space-y-3 rounded-md border p-4">
       <h3 className="font-medium">Schedule unattended fire</h3>
       <p className="text-xs text-muted-foreground">
-        Uses OPERATOR_PRIVATE_KEY on the server. No wallet popup. Works while
-        you are away. Cron must hit /api/cron/tick.
+        Uses OPERATOR_PRIVATE_KEY on the server. Set priority gwei high enough
+        for competitive FCFS so the tx is not stuck behind other bots.
       </p>
 
       <div>
@@ -81,9 +97,7 @@ export function SchedulePanel() {
       </div>
 
       <div>
-        <label className="text-sm font-medium">
-          Stage open time (local)
-        </label>
+        <label className="text-sm font-medium">Stage open time (local)</label>
         <input
           type="datetime-local"
           className="mt-1 w-full rounded border px-3 py-2 text-sm"
@@ -93,9 +107,7 @@ export function SchedulePanel() {
       </div>
 
       <div>
-        <label className="text-sm font-medium">
-          Pre-poll seconds (start polling this early)
-        </label>
+        <label className="text-sm font-medium">Pre-poll seconds</label>
         <input
           type="number"
           min={10}
@@ -105,6 +117,31 @@ export function SchedulePanel() {
           onChange={(e) => setPrePollSeconds(Number(e.target.value))}
         />
       </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="text-sm font-medium">Max fee (gwei)</label>
+          <input
+            className="mt-1 w-full rounded border px-3 py-2 text-sm"
+            value={maxFeeGwei}
+            onChange={(e) => setMaxFeeGwei(e.target.value)}
+            placeholder="e.g. 5"
+          />
+        </div>
+        <div>
+          <label className="text-sm font-medium">Priority fee (gwei)</label>
+          <input
+            className="mt-1 w-full rounded border px-3 py-2 text-sm"
+            value={maxPriorityGwei}
+            onChange={(e) => setMaxPriorityGwei(e.target.value)}
+            placeholder="e.g. 2"
+          />
+        </div>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Leave blank for node-suggested gas. For hyped FCFS, raise priority
+        (and max fee above it). Max fee must be ≥ priority fee.
+      </p>
 
       <Button onClick={arm} disabled={loading || !scheduledAt}>
         {loading ? "Arming…" : "Arm scheduled fire"}
